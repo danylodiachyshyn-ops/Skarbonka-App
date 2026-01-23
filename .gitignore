@@ -28,8 +28,8 @@ spark-warehouse/
 metastore_db/
 derby.log
 
-# Models
-models/
+# Models (trained models directory, not source code)
+/models/
 *.model
 
 # Data
