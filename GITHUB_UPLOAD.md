@@ -1,6 +1,8 @@
 # Upload project to GitHub
 
-Repo URL: **https://github.com/danylodiachyshyn-ops/Skarbonka-App**
+**Repo (clone URL):** `https://github.com/danylodiachyshyn-ops/Skarbonka-App.git`
+
+> **Note:** This repo already contains the Skarbonka App (React Native). To add the Binance Pattern Recognition project without overwriting it, push to a **separate branch** (see Option B below).
 
 ## 1. Initialize Git (if not already)
 
@@ -32,12 +34,23 @@ git branch -M main
 git push -u origin main
 ```
 
-If the repo already has content (e.g. README) and you want to overwrite or merge:
+If the repo already has content and you want to merge:
 
 ```bash
 git pull origin main --allow-unrelated-histories
 # resolve conflicts if any, then:
 git push -u origin main
+```
+
+### Option B: Push to a separate branch (recommended)
+
+Keeps Binance code separate from the existing Skarbonka App:
+
+```bash
+git add .
+git commit -m "Add Binance Pattern Recognition training pipeline"
+git checkout -b binance-pattern-recognition
+git push -u origin binance-pattern-recognition
 ```
 
 ## Notes
