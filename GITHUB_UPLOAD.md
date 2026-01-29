@@ -1,7 +1,6 @@
 # Upload project to GitHub
 
-Repo URL: **https://github.com/danylodiachyshyn-ops/Skarbo**  
-(If your repo name is different, replace `Skarbo` in the commands below.)
+Repo URL: **https://github.com/danylodiachyshyn-ops/Skarbonka-App**
 
 ## 1. Initialize Git (if not already)
 
@@ -14,13 +13,13 @@ git init
 ## 2. Add remote
 
 ```bash
-git remote add origin https://github.com/danylodiachyshyn-ops/Skarbo.git
+git remote add origin https://github.com/danylodiachyshyn-ops/Skarbonka-App.git
 ```
 
 If you already have a remote and the URL is wrong:
 
 ```bash
-git remote set-url origin https://github.com/danylodiachyshyn-ops/Skarbo.git
+git remote set-url origin https://github.com/danylodiachyshyn-ops/Skarbonka-App.git
 ```
 
 ## 3. Add, commit, push
