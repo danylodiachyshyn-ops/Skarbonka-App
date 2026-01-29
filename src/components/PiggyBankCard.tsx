@@ -1,5 +1,6 @@
-import { View, Text } from 'react-native';
-import { PiggyBank } from '@/src/lib/database.types';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { X } from 'lucide-react-native';
+import { UserBox } from '@/src/lib/database.types';
 import { DEFAULT_PIGGY_BANK_COLOR } from '@/src/lib/colors';
 import Animated, {
   useAnimatedStyle,
@@ -7,20 +8,34 @@ import Animated, {
 } from 'react-native-reanimated';
 
 interface PiggyBankCardProps {
-  piggyBank: PiggyBank;
+  userBox: UserBox;
   index: number;
   currentIndex: number;
+  /** From box_templates when template_id is set; used for progress bar */
+  targetAmount?: number | null;
+  /** Display currency (e.g. from template or default) */
+  currency?: string;
+  /** Card background color */
+  colorTheme?: string;
+  /** Called when user taps close; if provided, shows close button */
+  onClose?: (boxId: string) => void;
 }
 
 export default function PiggyBankCard({
-  piggyBank,
+  userBox,
   index,
   currentIndex,
+  targetAmount = null,
+  currency = 'PLN',
+  colorTheme,
+  onClose,
 }: PiggyBankCardProps) {
-  const progress = Number(piggyBank.current_amount) / Number(piggyBank.target_amount);
+  const current = Number(userBox.current_amount);
+  const target = targetAmount ?? 0;
+  const progress = target > 0 ? current / target : 0;
   const progressPercentage = Math.min(progress * 100, 100);
+  const bgColor = colorTheme ?? DEFAULT_PIGGY_BANK_COLOR;
 
-  // Animation for card scale and opacity based on position
   const animatedStyle = useAnimatedStyle(() => {
     const offset = index - currentIndex;
     const absOffset = Math.abs(offset);
@@ -41,14 +56,26 @@ export default function PiggyBankCard({
     };
   });
 
-  // Format currency
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('pl-PL', {
       style: 'currency',
-      currency: piggyBank.currency || 'PLN',
+      currency,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
+  };
+
+  const handleClosePress = () => {
+    if (!onClose) return;
+    const boxId = userBox.id;
+    Alert.alert(
+      'Close goal?',
+      'This goal will be archived. You can still see it later.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Close goal', style: 'destructive', onPress: () => onClose(boxId) },
+      ]
+    );
   };
 
   return (
@@ -65,62 +92,79 @@ export default function PiggyBankCard({
       <View
         className="flex-1 rounded-3xl overflow-hidden shadow-2xl"
         style={{
-          backgroundColor: piggyBank.color_theme || DEFAULT_PIGGY_BANK_COLOR,
+          backgroundColor: bgColor,
         }}
       >
-        {/* Card Content */}
         <View className="flex-1 p-8 justify-between">
-          {/* Header */}
           <View>
-            <Text className="text-white/80 text-sm font-medium mb-2">
-              {piggyBank.is_archived ? 'Archived' : 'Active Goal'}
-            </Text>
-            <Text className="text-white text-3xl font-bold mb-6">
-              {piggyBank.name}
-            </Text>
+            <View className="flex-row justify-between items-start">
+              <View className="flex-1">
+                <Text className="text-white/80 text-sm font-medium mb-2">
+                  {userBox.is_archived ? 'Archived' : 'Active Goal'}
+                </Text>
+                <Text className="text-white text-3xl font-bold mb-6">
+                  {userBox.name}
+                </Text>
+              </View>
+              {!userBox.is_archived && onClose && (
+                <TouchableOpacity
+                  onPress={handleClosePress}
+                  style={{ padding: 12, margin: -12, zIndex: 10 }}
+                  hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+                  activeOpacity={0.7}
+                >
+                  <X size={24} color="rgba(255,255,255,0.9)" />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
-          {/* Progress Section */}
           <View className="mb-6">
-            {/* Progress Bar */}
-            <View className="h-3 bg-white/20 rounded-full mb-4 overflow-hidden">
-              <View
-                className="h-full bg-white rounded-full"
-                style={{ width: `${progressPercentage}%` }}
-              />
-            </View>
+            {target > 0 && (
+              <View className="h-3 bg-white/20 rounded-full mb-4 overflow-hidden">
+                <View
+                  className="h-full bg-white rounded-full"
+                  style={{ width: `${progressPercentage}%` }}
+                />
+              </View>
+            )}
 
-            {/* Amounts */}
             <View className="flex-row justify-between items-baseline">
               <View>
                 <Text className="text-white/70 text-sm mb-1">Current</Text>
                 <Text className="text-white text-2xl font-bold">
-                  {formatCurrency(Number(piggyBank.current_amount))}
+                  {formatCurrency(current)}
                 </Text>
               </View>
-              <View className="items-end">
-                <Text className="text-white/70 text-sm mb-1">Target</Text>
-                <Text className="text-white text-2xl font-bold">
-                  {formatCurrency(Number(piggyBank.target_amount))}
-                </Text>
-              </View>
+              {target > 0 && (
+                <View className="items-end">
+                  <Text className="text-white/70 text-sm mb-1">Target</Text>
+                  <Text className="text-white text-2xl font-bold">
+                    {formatCurrency(target)}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 
-          {/* Progress Percentage */}
           <View className="items-center">
-            <Text className="text-white/90 text-4xl font-bold">
-              {Math.round(progressPercentage)}%
-            </Text>
-            <Text className="text-white/70 text-sm mt-1">Complete</Text>
+            {target > 0 ? (
+              <>
+                <Text className="text-white/90 text-4xl font-bold">
+                  {Math.round(progressPercentage)}%
+                </Text>
+                <Text className="text-white/70 text-sm mt-1">Complete</Text>
+              </>
+            ) : (
+              <Text className="text-white/70 text-sm">No target set</Text>
+            )}
           </View>
         </View>
 
-        {/* Decorative gradient overlay */}
         <View
           className="absolute inset-0 opacity-10"
           style={{
-            backgroundColor: `linear-gradient(135deg, ${piggyBank.color_theme} 0%, transparent 100%)`,
+            backgroundColor: 'transparent',
           }}
         />
       </View>

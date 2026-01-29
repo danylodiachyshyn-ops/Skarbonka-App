@@ -7,84 +7,65 @@ import {
   FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Plus, LogOut } from 'lucide-react-native';
 import { useAuthStore } from '@/src/hooks/useAuthStore';
-import { usePiggyBankStore } from '@/src/hooks/usePiggyBankStore';
+import { useBoxStore } from '@/src/hooks/useBoxStore';
 import PiggyBankCard from '@/src/components/PiggyBankCard';
+import PiggyBankGrid from '@/src/components/PiggyBankGrid';
 import AddMoneyModal from '@/src/components/AddMoneyModal';
 import CreateGoalModal from '@/src/components/CreateGoalModal';
+import { UserBox } from '@/src/lib/database.types';
+import { DEFAULT_PIGGY_BANK_COLOR } from '@/src/lib/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+type DisplayItem = UserBox & { isCreateNew?: never } | { id: string; isCreateNew: true };
 
 export default function HomeScreen() {
   const router = useRouter();
   const { signOut, user } = useAuthStore();
   const {
-    piggyBanks,
-    currentPiggyBankIndex,
+    userBoxes,
+    currentBoxIndex,
     setCurrentIndex,
-    getCurrentPiggyBank,
+    getCurrentBox,
     getTotalSavedThisMonth,
-    setPiggyBanks,
-  } = usePiggyBankStore();
+    fetchUserBoxes,
+    archiveUserBox,
+    loading,
+  } = useBoxStore();
 
   const [showAddMoneyModal, setShowAddMoneyModal] = useState(false);
   const [showCreateGoalModal, setShowCreateGoalModal] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
 
-  // Initialize with mock data for demo
+  // Завантажуємо дані користувача з Supabase при вході
   useEffect(() => {
-    if (piggyBanks.length === 0) {
-      setPiggyBanks([
-        {
-          id: '1',
-          user_id: 'mock_user_1',
-          name: 'Vacation',
-          target_amount: 5000,
-          current_amount: 1250,
-          currency: 'PLN',
-          color_theme: '#1F96D3',
-          is_archived: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: '2',
-          user_id: 'mock_user_1',
-          name: 'New Laptop',
-          target_amount: 3000,
-          current_amount: 1800,
-          currency: 'PLN',
-          color_theme: '#10b981',
-          is_archived: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ]);
+    if (user?.id) {
+      fetchUserBoxes();
     }
-  }, []);
+  }, [user?.id]);
 
-  // Update carousel index when piggy banks change
   useEffect(() => {
-    const activeBanks = piggyBanks.filter((bank) => !bank.is_archived);
-    if (activeBanks.length > 0 && carouselIndex >= activeBanks.length) {
-      setCarouselIndex(activeBanks.length - 1);
-      setCurrentIndex(activeBanks.length - 1);
+    const activeBoxes = userBoxes.filter((b) => !b.is_archived);
+    if (activeBoxes.length > 0 && carouselIndex >= activeBoxes.length) {
+      setCarouselIndex(activeBoxes.length - 1);
+      setCurrentIndex(activeBoxes.length - 1);
     }
-  }, [piggyBanks.length]);
+  }, [userBoxes.length]);
 
-  // Add "Create New" card to the end
-  const displayBanks = [
-    ...piggyBanks.filter((bank) => !bank.is_archived),
-    { id: 'create_new', isCreateNew: true } as any,
+  const displayItems: DisplayItem[] = [
+    ...userBoxes.filter((b) => !b.is_archived),
+    { id: 'create_new', isCreateNew: true },
   ];
 
-  const currentPiggyBank =
-    carouselIndex < displayBanks.length && !displayBanks[carouselIndex]?.isCreateNew
-      ? displayBanks[carouselIndex]
+  const currentBox: UserBox | null =
+    carouselIndex < displayItems.length && !(displayItems[carouselIndex] as { isCreateNew?: boolean })?.isCreateNew
+      ? (displayItems[carouselIndex] as UserBox)
       : null;
   const totalSaved = getTotalSavedThisMonth();
 
@@ -97,18 +78,34 @@ export default function HomeScreen() {
     setShowCreateGoalModal(true);
   };
 
-  const handleGoalCreated = () => {
+  const handleGoalCreated = async () => {
     setShowCreateGoalModal(false);
-    // Navigate to the newly created goal (last item before create_new)
-    const activeBanks = piggyBanks.filter((bank) => !bank.is_archived);
-    const newIndex = activeBanks.length - 1;
+    await fetchUserBoxes();
+    const activeBoxes = userBoxes.filter((b) => !b.is_archived);
+    const newIndex = activeBoxes.length - 1;
     setCarouselIndex(newIndex);
     setCurrentIndex(newIndex);
   };
 
+  const handleCloseGoal = async (boxId: string) => {
+    try {
+      await archiveUserBox(boxId);
+      await fetchUserBoxes();
+      // Use fresh state from store after fetch
+      const freshBoxes = useBoxStore.getState().userBoxes;
+      const activeBoxes = freshBoxes.filter((b) => !b.is_archived);
+      const newIndex = activeBoxes.length > 0 ? Math.min(carouselIndex, activeBoxes.length - 1) : 0;
+      setCarouselIndex(newIndex);
+      setCurrentIndex(newIndex);
+    } catch (e) {
+      // Error shown in store; optionally show alert
+      const err = useBoxStore.getState().error;
+      if (err) Alert.alert('Error', err);
+    }
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header */}
       <View className="flex-row justify-between items-center px-6 pt-4 pb-2">
         <View>
           <Text className="text-gray-500 text-sm">Welcome back</Text>
@@ -125,16 +122,20 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Carousel */}
       <View className="flex-1 justify-center">
-        <FlatList
-          data={displayBanks}
+        {loading && userBoxes.length === 0 ? (
+          <View className="flex-1 items-center justify-center">
+            <Text className="text-gray-500 text-lg">Loading your boxes...</Text>
+          </View>
+        ) : (
+          <FlatList
+          data={displayItems}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           keyExtractor={(item) => item.id}
           renderItem={({ item, index }) => {
-            if (item.isCreateNew) {
+            if ((item as { isCreateNew?: boolean }).isCreateNew) {
               return (
                 <View style={{ width: SCREEN_WIDTH }} className="flex-1 justify-center items-center px-5">
                   <TouchableOpacity
@@ -156,12 +157,19 @@ export default function HomeScreen() {
               );
             }
 
+            const box = item as UserBox & { target_amount?: number | null; box_templates?: { total_amount?: number; currency?: string } | null };
+            const targetAmount = box.target_amount ?? box.box_templates?.total_amount ?? null;
+            const currency = box.box_templates?.currency ?? 'PLN';
             return (
               <View style={{ width: SCREEN_WIDTH }}>
                 <PiggyBankCard
-                  piggyBank={item}
+                  userBox={box}
                   index={index}
                   currentIndex={carouselIndex}
+                  targetAmount={targetAmount}
+                  currency={currency}
+                  colorTheme={DEFAULT_PIGGY_BANK_COLOR}
+                  onClose={handleCloseGoal}
                 />
               </View>
             );
@@ -169,27 +177,29 @@ export default function HomeScreen() {
           onMomentumScrollEnd={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
             const index = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
             setCarouselIndex(index);
-            if (!displayBanks[index]?.isCreateNew) {
+            if (!(displayItems[index] as { isCreateNew?: boolean })?.isCreateNew) {
               setCurrentIndex(index);
             }
           }}
         />
+        )}
       </View>
 
-      {/* Action Area */}
-      {currentPiggyBank && !currentPiggyBank.is_archived && (
-        <View className="px-6 pb-8">
-          {/* Add Money Button */}
-          <TouchableOpacity
-            onPress={() => setShowAddMoneyModal(true)}
-            className="bg-primary-500 rounded-2xl py-5 items-center shadow-lg mb-4"
-            activeOpacity={0.8}
-          >
-            <Text className="text-white text-xl font-bold">Add Money</Text>
-          </TouchableOpacity>
+      {currentBox && !currentBox.is_archived && (
+        <View className="px-0 pb-8">
+          <PiggyBankGrid userBox={currentBox} />
 
-          {/* Statistics */}
-          <View className="bg-white rounded-2xl p-4 shadow-sm">
+          <View className="px-6">
+            <TouchableOpacity
+              onPress={() => setShowAddMoneyModal(true)}
+              className="bg-primary-500 rounded-2xl py-5 items-center shadow-lg mb-4"
+              activeOpacity={0.8}
+            >
+              <Text className="text-white text-xl font-bold">Add Money</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View className="px-6 bg-white rounded-2xl mx-6 p-4 shadow-sm">
             <Text className="text-gray-500 text-sm mb-1">Total saved this month</Text>
             <Text className="text-gray-900 text-2xl font-bold">
               {new Intl.NumberFormat('pl-PL', {
@@ -202,18 +212,21 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Modals */}
-      <AddMoneyModal
-        visible={showAddMoneyModal}
-        onClose={() => setShowAddMoneyModal(false)}
-        piggyBank={currentPiggyBank}
-      />
+      {showAddMoneyModal && (
+        <AddMoneyModal
+          visible={showAddMoneyModal}
+          onClose={() => setShowAddMoneyModal(false)}
+          userBox={currentBox}
+        />
+      )}
 
-      <CreateGoalModal
-        visible={showCreateGoalModal}
-        onClose={() => setShowCreateGoalModal(false)}
-        onGoalCreated={handleGoalCreated}
-      />
+      {showCreateGoalModal && (
+        <CreateGoalModal
+          visible={showCreateGoalModal}
+          onClose={() => setShowCreateGoalModal(false)}
+          onGoalCreated={handleGoalCreated}
+        />
+      )}
     </SafeAreaView>
   );
 }

@@ -1,205 +1,156 @@
 -- ============================================
--- Skarbonka App - Supabase Database Schema
+-- ПОВНА СХЕМА: Savings Tracker (Phygital App)
 -- ============================================
--- Run this SQL in your Supabase SQL Editor to set up the database
 
--- Enable UUID extension
+-- 1. НАЛАШТУВАННЯ ТА РОЗШИРЕННЯ
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================
--- 1. PROFILES TABLE
+-- 2. ТАБЛИЦЯ ПРОФІЛІВ (Profiles)
 -- ============================================
-CREATE TABLE IF NOT EXISTS profiles (
+CREATE TABLE public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL,
+  full_name TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
 
--- Enable Row Level Security (RLS)
+-- Вмикаємо захист (RLS)
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
--- Policy: Users can only read and update their own profile
-CREATE POLICY "Users can view own profile"
-  ON profiles FOR SELECT
-  USING (auth.uid() = id);
-
-CREATE POLICY "Users can update own profile"
-  ON profiles FOR UPDATE
-  USING (auth.uid() = id);
-
-CREATE POLICY "Users can insert own profile"
-  ON profiles FOR INSERT
-  WITH CHECK (auth.uid() = id);
+-- Політики доступу (Кожен бачить тільки себе)
+CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
 
 -- ============================================
--- 2. PIGGY_BANKS TABLE
+-- 3. ТАБЛИЦЯ ШАБЛОНІВ (Box Templates) - НОВЕ!
+-- Тут зберігаються типи ваших фізичних коробок
 -- ============================================
-CREATE TABLE IF NOT EXISTS piggy_banks (
+CREATE TABLE public.box_templates (
+  id TEXT PRIMARY KEY, -- наприклад: 'box_10k_uah'
+  name TEXT NOT NULL, -- наприклад: 'Скарбничка 10,000 грн'
+  total_amount INTEGER NOT NULL, -- 10000
+  currency TEXT DEFAULT 'UAH',
+  
+  -- КЛЮЧОВЕ ПОЛЕ: Масив чисел, що намальовані на коробці
+  -- Наприклад: [5, 10, 20, 50, 5, 10...]
+  grid_config JSONB NOT NULL, 
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- RLS: Шаблони доступні для читання всім (публічний каталог)
+ALTER TABLE box_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read templates" ON box_templates FOR SELECT USING (true);
+
+-- ============================================
+-- 4. ТАБЛИЦЯ СКАРБНИЧОК ЮЗЕРА (User Boxes)
+-- ============================================
+CREATE TABLE public.user_boxes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  target_amount DECIMAL(12, 2) NOT NULL CHECK (target_amount > 0),
-  current_amount DECIMAL(12, 2) DEFAULT 0 CHECK (current_amount >= 0),
-  currency TEXT NOT NULL DEFAULT 'PLN',
-  color_theme TEXT NOT NULL DEFAULT '#0ea5e9',
+  
+  -- Зв'язок з шаблоном (яку коробку вибрав юзер)
+  template_id TEXT REFERENCES box_templates(id),
+  
+  name TEXT NOT NULL, -- Юзер може перейменувати ("На мрію")
+  current_amount DECIMAL(12, 2) DEFAULT 0,
+  target_amount DECIMAL(12, 2), -- Цільова сума (з Create Goal або з шаблону)
   is_archived BOOLEAN DEFAULT FALSE,
+  
+  -- КЛЮЧОВЕ ПОЛЕ: Які саме клітинки закреслено
+  -- Зберігає масив індексів, наприклад: [0, 2, 5] (закреслено 1-ше, 3-тє і 6-те число)
+  crossed_out_indices JSONB DEFAULT '[]'::jsonb,
+  
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
 
--- Enable Row Level Security (RLS)
-ALTER TABLE piggy_banks ENABLE ROW LEVEL SECURITY;
+-- RLS: Юзер бачить тільки свої коробки
+ALTER TABLE user_boxes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users view own boxes" ON user_boxes FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own boxes" ON user_boxes FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users update own boxes" ON user_boxes FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users delete own boxes" ON user_boxes FOR DELETE USING (auth.uid() = user_id);
 
--- Policy: Users can only access their own piggy banks
-CREATE POLICY "Users can view own piggy banks"
-  ON piggy_banks FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own piggy banks"
-  ON piggy_banks FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own piggy banks"
-  ON piggy_banks FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete own piggy banks"
-  ON piggy_banks FOR DELETE
-  USING (auth.uid() = user_id);
-
--- Create index for faster queries
-CREATE INDEX IF NOT EXISTS idx_piggy_banks_user_id ON piggy_banks(user_id);
-CREATE INDEX IF NOT EXISTS idx_piggy_banks_is_archived ON piggy_banks(is_archived);
+-- Міграція: якщо таблиця вже існує без target_amount, виконати в SQL Editor:
+-- ALTER TABLE public.user_boxes ADD COLUMN IF NOT EXISTS target_amount DECIMAL(12, 2);
 
 -- ============================================
--- 3. TRANSACTIONS TABLE
+-- 5. ТАБЛИЦЯ ТРАНЗАКЦІЙ (Transactions)
+-- Історія поповнень
 -- ============================================
-CREATE TABLE IF NOT EXISTS transactions (
+CREATE TABLE public.transactions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  piggy_bank_id UUID NOT NULL REFERENCES piggy_banks(id) ON DELETE CASCADE,
+  box_id UUID NOT NULL REFERENCES user_boxes(id) ON DELETE CASCADE,
   amount DECIMAL(12, 2) NOT NULL CHECK (amount > 0),
-  date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
-  note TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
+  note TEXT, -- Наприклад "Закреслив 50 грн"
+  date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
 
--- Enable Row Level Security (RLS)
+-- RLS: Юзер бачить транзакції тільки своїх коробок
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users view own transactions" ON transactions FOR SELECT 
+USING (EXISTS (SELECT 1 FROM user_boxes WHERE user_boxes.id = transactions.box_id AND user_boxes.user_id = auth.uid()));
 
--- Policy: Users can only access transactions for their own piggy banks
-CREATE POLICY "Users can view own transactions"
-  ON transactions FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM piggy_banks
-      WHERE piggy_banks.id = transactions.piggy_bank_id
-      AND piggy_banks.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Users can insert own transactions"
-  ON transactions FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM piggy_banks
-      WHERE piggy_banks.id = transactions.piggy_bank_id
-      AND piggy_banks.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Users can update own transactions"
-  ON transactions FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM piggy_banks
-      WHERE piggy_banks.id = transactions.piggy_bank_id
-      AND piggy_banks.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Users can delete own transactions"
-  ON transactions FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM piggy_banks
-      WHERE piggy_banks.id = transactions.piggy_bank_id
-      AND piggy_banks.user_id = auth.uid()
-    )
-  );
-
--- Create indexes for faster queries
-CREATE INDEX IF NOT EXISTS idx_transactions_piggy_bank_id ON transactions(piggy_bank_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date DESC);
+CREATE POLICY "Users insert own transactions" ON transactions FOR INSERT 
+WITH CHECK (EXISTS (SELECT 1 FROM user_boxes WHERE user_boxes.id = transactions.box_id AND user_boxes.user_id = auth.uid()));
 
 -- ============================================
--- 4. FUNCTION: Auto-update updated_at timestamp
+-- 6. АВТОМАТИЗАЦІЯ (Triggers)
 -- ============================================
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = TIMEZONE('utc', NOW());
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
--- Trigger to automatically update updated_at on piggy_banks
-CREATE TRIGGER update_piggy_banks_updated_at
-  BEFORE UPDATE ON piggy_banks
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
-
--- ============================================
--- 5. FUNCTION: Auto-create profile on user signup
--- ============================================
+-- АВТО-СТВОРЕННЯ ПРОФІЛЮ при реєстрації (full_name з user_metadata)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email)
-  VALUES (NEW.id, NEW.email);
+  INSERT INTO public.profiles (id, email, full_name)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name')
+  );
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Trigger to create profile when a new user signs up
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_new_user();
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- ============================================
--- 6. FUNCTION: Update piggy_bank current_amount when transaction is added
--- ============================================
-CREATE OR REPLACE FUNCTION update_piggy_bank_amount()
+-- АВТО-ОНОВЛЕННЯ СУМИ в коробці при додаванні транзакції
+CREATE OR REPLACE FUNCTION update_box_amount()
 RETURNS TRIGGER AS $$
 BEGIN
-  UPDATE piggy_banks
-  SET current_amount = current_amount + NEW.amount
-  WHERE id = NEW.piggy_bank_id;
+  UPDATE user_boxes
+  SET current_amount = current_amount + NEW.amount,
+      updated_at = TIMEZONE('utc', NOW())
+  WHERE id = NEW.box_id;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger to update current_amount when transaction is inserted
-CREATE TRIGGER update_piggy_bank_on_transaction
+CREATE TRIGGER on_transaction_added
   AFTER INSERT ON transactions
-  FOR EACH ROW
-  EXECUTE FUNCTION update_piggy_bank_amount();
+  FOR EACH ROW EXECUTE FUNCTION update_box_amount();
+
 
 -- ============================================
--- 7. FUNCTION: Update piggy_bank current_amount when transaction is deleted
+-- 7. ТЕСТОВІ ДАНІ (Seed Data)
+-- Додаємо шаблони ваших реальних коробок
 -- ============================================
-CREATE OR REPLACE FUNCTION update_piggy_bank_amount_on_delete()
-RETURNS TRIGGER AS $$
-BEGIN
-  UPDATE piggy_banks
-  SET current_amount = current_amount - OLD.amount
-  WHERE id = OLD.piggy_bank_id;
-  RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger to update current_amount when transaction is deleted
-CREATE TRIGGER update_piggy_bank_on_transaction_delete
-  AFTER DELETE ON transactions
-  FOR EACH ROW
-  EXECUTE FUNCTION update_piggy_bank_amount_on_delete();
+INSERT INTO box_templates (id, name, total_amount, grid_config)
+VALUES 
+(
+  'box_1000_uah', 
+  'Скарбничка 1000 грн', 
+  1000, 
+  '[5, 10, 20, 50, 5, 10, 20, 50, 100, 200, 50, 20, 10, 5, 5, 10, 20, 50, 100, 200, 50, 20]'::jsonb
+),
+(
+  'box_5000_uah', 
+  'Скарбничка 5000 грн', 
+  5000, 
+  '[50, 100, 200, 500, 50, 100, 200, 500, 50, 100, 200, 500, 50, 100, 200, 500, 1000]'::jsonb
+)
+ON CONFLICT DO NOTHING;

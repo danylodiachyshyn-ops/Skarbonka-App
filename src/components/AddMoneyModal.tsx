@@ -10,26 +10,29 @@ import {
   Alert,
 } from 'react-native';
 import { X } from 'lucide-react-native';
-import { usePiggyBankStore } from '@/src/hooks/usePiggyBankStore';
-import { PiggyBank } from '@/src/lib/database.types';
+import { useBoxStore } from '@/src/hooks/useBoxStore';
+import { UserBox } from '@/src/lib/database.types';
 
 interface AddMoneyModalProps {
   visible: boolean;
   onClose: () => void;
-  piggyBank: PiggyBank | null;
+  userBox: UserBox | null;
 }
 
 export default function AddMoneyModal({
   visible,
   onClose,
-  piggyBank,
+  userBox,
 }: AddMoneyModalProps) {
+  if (!visible) return null;
+
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
-  const { addTransaction, getCurrentPiggyBank } = usePiggyBankStore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { addTransaction } = useBoxStore();
 
-  const handleAddMoney = () => {
-    if (!piggyBank) return;
+  const handleAddMoney = async () => {
+    if (!userBox) return;
 
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
@@ -37,17 +40,19 @@ export default function AddMoneyModal({
       return;
     }
 
-    addTransaction({
-      piggy_bank_id: piggyBank.id,
-      amount: numAmount,
-      date: new Date().toISOString(),
-      note: note.trim() || null,
-    });
-
-    // Reset form
-    setAmount('');
-    setNote('');
-    onClose();
+    setIsSubmitting(true);
+    try {
+      await addTransaction(userBox.id, numAmount, note.trim() || null);
+      
+      // Reset form
+      setAmount('');
+      setNote('');
+      onClose();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to add transaction');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleNumberPress = (num: string) => {
@@ -65,13 +70,13 @@ export default function AddMoneyModal({
     if (isNaN(num)) return '0';
     return new Intl.NumberFormat('pl-PL', {
       style: 'currency',
-      currency: piggyBank?.currency || 'PLN',
+      currency: 'PLN',
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     }).format(num);
   };
 
-  if (!piggyBank) return null;
+  if (!userBox) return null;
 
   return (
     <Modal
@@ -150,9 +155,11 @@ export default function AddMoneyModal({
                 onPress={handleAddMoney}
                 className="bg-primary-500 rounded-2xl py-5 items-center"
                 activeOpacity={0.8}
-                disabled={!amount || parseFloat(amount) <= 0}
+                disabled={!amount || parseFloat(amount) <= 0 || isSubmitting}
               >
-                <Text className="text-white text-lg font-bold">Add Money</Text>
+                <Text className="text-white text-lg font-bold">
+                  {isSubmitting ? 'Adding...' : 'Add Money'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>

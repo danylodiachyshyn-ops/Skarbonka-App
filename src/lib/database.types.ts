@@ -13,53 +13,82 @@ export interface Database {
         Row: {
           id: string;
           email: string;
+          full_name: string | null;
           created_at: string;
         };
         Insert: {
           id: string;
           email: string;
+          full_name?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           email?: string;
+          full_name?: string | null;
           created_at?: string;
         };
       };
-      piggy_banks: {
+      box_templates: {
+        Row: {
+          id: string;
+          name: string;
+          total_amount: number;
+          currency: string;
+          grid_config: number[];
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          name: string;
+          total_amount: number;
+          currency?: string;
+          grid_config: number[];
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          total_amount?: number;
+          currency?: string;
+          grid_config?: number[];
+          created_at?: string;
+        };
+      };
+      user_boxes: {
         Row: {
           id: string;
           user_id: string;
+          template_id: string | null;
           name: string;
-          target_amount: number;
           current_amount: number;
-          currency: string;
-          color_theme: string;
+          target_amount: number | null;
           is_archived: boolean;
+          crossed_out_indices: number[];
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
           user_id: string;
+          template_id?: string | null;
           name: string;
-          target_amount: number;
           current_amount?: number;
-          currency?: string;
-          color_theme?: string;
+          target_amount?: number | null;
           is_archived?: boolean;
+          crossed_out_indices?: number[];
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
           user_id?: string;
+          template_id?: string | null;
           name?: string;
-          target_amount?: number;
           current_amount?: number;
-          currency?: string;
-          color_theme?: string;
+          target_amount?: number | null;
           is_archived?: boolean;
+          crossed_out_indices?: number[];
           created_at?: string;
           updated_at?: string;
         };
@@ -67,27 +96,24 @@ export interface Database {
       transactions: {
         Row: {
           id: string;
-          piggy_bank_id: string;
+          box_id: string;
           amount: number;
-          date: string;
           note: string | null;
-          created_at: string;
+          date: string;
         };
         Insert: {
           id?: string;
-          piggy_bank_id: string;
+          box_id: string;
           amount: number;
-          date?: string;
           note?: string | null;
-          created_at?: string;
+          date?: string;
         };
         Update: {
           id?: string;
-          piggy_bank_id?: string;
+          box_id?: string;
           amount?: number;
-          date?: string;
           note?: string | null;
-          created_at?: string;
+          date?: string;
         };
       };
     };
@@ -105,8 +131,9 @@ export interface Database {
 
 // Type helpers for easier usage
 export type Profile = Database['public']['Tables']['profiles']['Row'];
-export type PiggyBank = Database['public']['Tables']['piggy_banks']['Row'];
+export type BoxTemplate = Database['public']['Tables']['box_templates']['Row'];
+export type UserBox = Database['public']['Tables']['user_boxes']['Row'];
 export type Transaction = Database['public']['Tables']['transactions']['Row'];
 
-export type PiggyBankInsert = Database['public']['Tables']['piggy_banks']['Insert'];
+export type UserBoxInsert = Database['public']['Tables']['user_boxes']['Insert'];
 export type TransactionInsert = Database['public']['Tables']['transactions']['Insert'];
