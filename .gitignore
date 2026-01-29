@@ -4,52 +4,40 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
+.eggs/
+dist/
+build/
 *.egg
 
-# PySpark
-spark-warehouse/
-metastore_db/
-derby.log
-
-# Models (trained models directory, not source code)
-/models/
-*.model
-
-# Data
-data/
-*.parquet
-*.csv
+# Virtual env
+venv/
+.venv/
+env/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
-*~
-
-# OS
 .DS_Store
-Thumbs.db
 
-# Jupyter
-.ipynb_checkpoints/
+# Project artifacts (do not push to GitHub)
+model/
+models/*.parquet
+checkpoint_dir/
+features_cache.parquet/
+level0_oof_predictions.parquet/
+archive_extracted/
+archive.zip
+*.parquet
+kaggle_data/
 
-# Logs
-*.log
+# Spark
+/tmp/
+spark-warehouse/
+derby.log
+metastore_db/
+
+# Keep src/models/ (source code), ignore only trained model outputs
+!src/models/
