@@ -57,9 +57,9 @@ export default function PiggyBankCard({
   });
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('pl-PL', {
+    return new Intl.NumberFormat('en', {
       style: 'currency',
-      currency,
+      currency: currency || 'EUR',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);

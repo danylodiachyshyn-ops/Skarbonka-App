@@ -25,11 +25,14 @@ interface BoxStore {
   
   // Supabase async actions
   fetchUserBoxes: () => Promise<void>;
+  fetchTransactions: () => Promise<void>;
   addTransaction: (boxId: string, amount: number, note?: string | null) => Promise<void>;
+  resetBoxBalance: (boxId: string) => Promise<void>;
   crossOutIndex: (boxId: string, index: number) => Promise<void>;
   createBoxFromTemplate: (templateId: string, name?: string) => Promise<void>;
-  createUserBox: (name: string, targetAmount?: number | null) => Promise<void>;
+  createUserBox: (name: string, targetAmount?: number | null) => Promise<string | null>;
   archiveUserBox: (boxId: string) => Promise<void>;
+  deleteUserBox: (boxId: string) => Promise<void>;
   
   // Legacy sync methods (kept for backward compatibility)
   addUserBox: (box: Omit<UserBox, 'id' | 'created_at' | 'updated_at'>) => void;
@@ -83,7 +86,7 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
       const { data, error } = await supabase
         .from('user_boxes')
         .select('*, box_templates(name, total_amount, grid_config, currency)')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
 
       if (error) {
         throw error;
@@ -96,9 +99,29 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
       })) as UserBox[];
 
       set({ userBoxes: boxes, loading: false });
+      await get().fetchTransactions();
     } catch (err: any) {
       console.error('Error fetching user boxes:', err);
       set({ error: err.message || 'Failed to fetch boxes', loading: false });
+    }
+  },
+
+  fetchTransactions: async () => {
+    const boxIds = get().userBoxes.map((b) => b.id);
+    if (boxIds.length === 0) {
+      set({ transactions: [] });
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .in('box_id', boxIds)
+        .order('date', { ascending: false });
+      if (error) throw error;
+      set({ transactions: (data ?? []) as Transaction[] });
+    } catch (err) {
+      console.error('Error fetching transactions:', err);
     }
   },
 
@@ -166,6 +189,41 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
     } catch (err: any) {
       console.error('Error adding transaction:', err);
       set({ error: err.message || 'Failed to add transaction', loading: false });
+    }
+  },
+
+  resetBoxBalance: async (boxId: string) => {
+    try {
+      const state = get();
+      const box = state.userBoxes.find((b) => b.id === boxId);
+      if (!box) throw new Error('Box not found');
+      const { error } = await supabase
+        .from('user_boxes')
+        .update({ current_amount: 0, updated_at: new Date().toISOString() } as never)
+        .eq('id', boxId);
+      if (error) throw error;
+      set((prev) => ({
+        userBoxes: prev.userBoxes.map((b) =>
+          b.id === boxId ? { ...b, current_amount: 0, updated_at: new Date().toISOString() } : b
+        ),
+      }));
+    } catch (err) {
+      console.error('Error resetting box balance:', err);
+      throw err;
+    }
+  },
+
+  deleteUserBox: async (boxId: string) => {
+    try {
+      const { error } = await supabase.from('user_boxes').delete().eq('id', boxId);
+      if (error) throw error;
+      set((state) => ({
+        userBoxes: state.userBoxes.filter((b) => b.id !== boxId),
+        transactions: state.transactions.filter((t) => t.box_id !== boxId),
+      }));
+    } catch (err) {
+      console.error('Error deleting box:', err);
+      throw err;
     }
   },
 
@@ -362,7 +420,7 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
       }
 
       // Set target_amount if provided (works once column exists)
-      const newBoxId = (newBox as { id?: string } | null)?.id;
+      const newBoxId = (newBox as { id?: string } | null)?.id ?? null;
       if (target != null && newBoxId) {
         await supabase
           .from('user_boxes')
@@ -372,6 +430,7 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
 
       await get().fetchUserBoxes();
       set({ loading: false });
+      return newBoxId;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create box';
       console.error('Error creating user box:', err);

@@ -14,23 +14,23 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "scheme": "skarbonka-app",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.skarbonka.app"
+      "bundleIdentifier": "com.yourname.skarbonka",
+      "supportsTablet": true
     },
     "android": {
+      "package": "com.yourname.skarbonka",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1F96D3"
-      },
-      "package": "com.skarbonka.app"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router"
-    ],
-    "scheme": "skarbonka"
+    ]
   }
 }

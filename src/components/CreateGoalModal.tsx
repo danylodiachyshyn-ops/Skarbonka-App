@@ -13,7 +13,7 @@ import {
 import { X } from 'lucide-react-native';
 import { useBoxStore } from '@/src/hooks/useBoxStore';
 import { useAuthStore } from '@/src/hooks/useAuthStore';
-import { DEFAULT_PIGGY_BANK_COLOR } from '@/src/lib/colors';
+import { useJarColor, JAR_COLOR_PRESETS, JarColorPreset } from '@/src/contexts/JarColorContext';
 
 interface CreateGoalModalProps {
   visible: boolean;
@@ -21,16 +21,11 @@ interface CreateGoalModalProps {
   onGoalCreated?: () => void;
 }
 
-type ColorTheme = { name: string; value: string };
-
-const COLOR_THEMES: ColorTheme[] = [
-  { name: 'Brand Blue', value: '#1F96D3' }, // Deep blue (main brand color)
-  { name: 'Light Blue', value: '#33A8E8' }, // Light blue (top gradient)
-  { name: 'Green', value: '#10b981' },
-  { name: 'Purple', value: '#8b5cf6' },
-  { name: 'Pink', value: '#ec4899' },
-  { name: 'Orange', value: '#f59e0b' },
-  { name: 'Red', value: '#ef4444' },
+const PRESET_OPTIONS: { key: JarColorPreset; label: string }[] = [
+  { key: 'emerald', label: 'Emerald' },
+  { key: 'ocean', label: 'Ocean Blue' },
+  { key: 'sunset', label: 'Sunset Orange' },
+  { key: 'slate', label: 'Slate' },
 ];
 
 export default function CreateGoalModal({
@@ -38,19 +33,15 @@ export default function CreateGoalModal({
   onClose,
   onGoalCreated,
 }: CreateGoalModalProps) {
-  // Prevent rendering when hidden (avoids runtime crashes inside Modal subtree)
   if (!visible) return null;
 
   const [name, setName] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
-  const [selectedColor, setSelectedColor] = useState<string>(DEFAULT_PIGGY_BANK_COLOR);
+  const [selectedPreset, setSelectedPreset] = useState<JarColorPreset>('ocean');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useAuthStore();
   const { createUserBox } = useBoxStore();
-
-  const handleSelectColor = (value: string) => {
-    setSelectedColor(value);
-  };
+  const { setColorForBox } = useJarColor();
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -71,16 +62,19 @@ export default function CreateGoalModal({
 
     setIsSubmitting(true);
     try {
-      await createUserBox(name.trim(), target ?? undefined);
+      const newBoxId = await createUserBox(name.trim(), target ?? undefined);
 
-      // Reset form
+      if (newBoxId) {
+        await setColorForBox(newBoxId, selectedPreset);
+      }
+
       setName('');
       setTargetAmount('');
-      setSelectedColor(DEFAULT_PIGGY_BANK_COLOR);
+      setSelectedPreset('ocean');
       onClose();
       onGoalCreated?.();
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create goal');
+    } catch (error: unknown) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to create goal');
     } finally {
       setIsSubmitting(false);
     }
@@ -100,7 +94,6 @@ export default function CreateGoalModal({
         <View className="flex-1 bg-black/50 justify-end">
           <View className="bg-white rounded-t-3xl pt-6 pb-8 max-h-[90%]">
             <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Header */}
               <View className="flex-row justify-between items-center px-6 mb-6">
                 <Text className="text-2xl font-bold text-gray-900">Create New Goal</Text>
                 <TouchableOpacity onPress={onClose} className="p-2">
@@ -108,7 +101,6 @@ export default function CreateGoalModal({
                 </TouchableOpacity>
               </View>
 
-              {/* Goal Name */}
               <View className="px-6 mb-6">
                 <Text className="text-gray-500 text-sm mb-2">Goal Name</Text>
                 <TextInput
@@ -121,7 +113,6 @@ export default function CreateGoalModal({
                 />
               </View>
 
-              {/* Target Amount */}
               <View className="px-6 mb-6">
                 <Text className="text-gray-500 text-sm mb-2">Target Amount</Text>
                 <TextInput
@@ -134,35 +125,41 @@ export default function CreateGoalModal({
                 />
               </View>
 
-              {/* Color Theme */}
               <View className="px-6 mb-6">
-                <Text className="text-gray-500 text-sm mb-3">Color Theme</Text>
-                <View className="flex-row flex-wrap">
-                  {COLOR_THEMES.map((color: ColorTheme) => (
-                    <TouchableOpacity
-                      key={color.value}
-                      onPress={() => handleSelectColor(color.value)}
-                      className="w-16 h-16 rounded-2xl items-center justify-center mr-3 mb-3"
-                      style={{
-                        backgroundColor: color.value,
-                        borderWidth: selectedColor === color.value ? 4 : 0,
-                        borderColor: selectedColor === color.value ? '#80cbed' : 'transparent',
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      {selectedColor === color.value && (
-                        <View className="w-6 h-6 bg-white rounded-full" />
-                      )}
-                    </TouchableOpacity>
-                  ))}
+                <Text className="text-gray-500 text-sm mb-3">Jar color</Text>
+                <View className="flex-row flex-wrap gap-3">
+                  {PRESET_OPTIONS.map(({ key, label }) => {
+                    const colors = JAR_COLOR_PRESETS[key];
+                    const isSelected = selectedPreset === key;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        onPress={() => setSelectedPreset(key)}
+                        className="rounded-2xl overflow-hidden"
+                        style={{
+                          width: '47%',
+                          borderWidth: isSelected ? 3 : 0,
+                          borderColor: colors.button,
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <View
+                          className="h-14 rounded-2xl items-center justify-center"
+                          style={{ backgroundColor: colors.button }}
+                        >
+                          <Text className="text-white font-semibold">{label}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </View>
 
-              {/* Create Button */}
               <View className="px-6 mb-4">
                 <TouchableOpacity
                   onPress={handleCreate}
-                  className="bg-primary-500 rounded-2xl py-5 items-center"
+                  className="rounded-2xl py-5 items-center"
+                  style={{ backgroundColor: JAR_COLOR_PRESETS[selectedPreset].button }}
                   activeOpacity={0.8}
                   disabled={!name.trim() || isSubmitting}
                 >

@@ -132,31 +132,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      // Required for web; no-op on native
-      WebBrowser.maybeCompleteAuthSession();
-
-      // Use custom scheme (works in dev builds and production)
-      // For Expo Go: you must use `npx expo start --tunnel` to get HTTPS URL
+      // Must match Supabase Redirect URL: skarbonka-app://--/auth/callback
       const redirectTo = makeRedirectUri({
-        scheme: 'skarbonka',
+        scheme: 'skarbonka-app',
         path: 'auth/callback',
       });
       
-      // Warn if using Expo Go without tunnel
-      if (redirectTo.startsWith('exp://')) {
-        console.warn('[OAuth] ⚠️  Expo Go detected with exp:// URL');
-        console.warn('[OAuth] Safari cannot handle exp:// URLs');
-        console.warn('[OAuth] Solution: Run `npx expo start --tunnel` to get HTTPS URL');
-        console.warn('[OAuth] Or use a development build instead of Expo Go');
-      }
-      
       if (__DEV__) {
         console.log('[OAuth] Redirect URL:', redirectTo);
-        console.log('[OAuth] Add this URL in Supabase → Auth → URL Configuration → Redirect URLs');
+        if (redirectTo.startsWith('exp://')) {
+          console.log('[OAuth] Expo Go: add the URL above to Supabase → Auth → URL Configuration → Redirect URLs');
+          console.warn('[OAuth] Note: IP changes when you switch networks; for stable OAuth use a dev build (scheme skarbonka-app)');
+        } else {
+          console.log('[OAuth] Add this URL in Supabase → Auth → URL Configuration → Redirect URLs');
+        }
         const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
         const supabaseCallback = supabaseUrl ? `${supabaseUrl.replace(/\/$/, '')}/auth/v1/callback` : '';
         if (supabaseCallback) {
-          console.log('[OAuth] Add this URL in Google Cloud Console → Credentials → Authorized redirect URIs:', supabaseCallback);
+          console.log('[OAuth] Google Cloud → Credentials → Authorized redirect URIs:', supabaseCallback);
         }
       }
 
@@ -186,6 +179,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ error: 'Sign in was cancelled or failed' });
         return;
       }
+
+      // Close the browser tab and return to the app
+      WebBrowser.maybeCompleteAuthSession();
 
       const { access_token, refresh_token, error: paramsError, error_description } = getSessionParamsFromUrl(result.url);
 
