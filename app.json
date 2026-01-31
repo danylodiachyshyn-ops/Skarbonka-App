@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Skarbonka",
+    "slug": "skarbonka-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1F96D3"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "scheme": "skarbonka-app",
+    "ios": {
+      "bundleIdentifier": "com.yourname.skarbonka",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.yourname.skarbonka",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1F96D3"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
