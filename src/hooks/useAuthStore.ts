@@ -22,6 +22,8 @@ interface AuthState {
   signUp: (email: string, password: string, username: string, confirmPassword: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   resendConfirmation: (email: string) => Promise<void>;
+  updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  resetPasswordForEmail: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   checkSession: () => Promise<void>;
   setSession: (session: Session | null) => void;
@@ -235,6 +237,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (error) {
       set({ loading: false, error: error.message });
       return;
+    }
+    set({ loading: false, error: null });
+  },
+
+  updatePassword: async (currentPassword: string, newPassword: string) => {
+    set({ loading: true, error: null });
+    const { user } = get();
+    if (!user?.email) {
+      set({ loading: false, error: 'Not signed in' });
+      throw new Error('Not signed in');
+    }
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+    if (signInError) {
+      set({ loading: false, error: 'Current password is incorrect' });
+      throw new Error('Current password is incorrect');
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      set({ loading: false, error: error.message });
+      throw error;
+    }
+    set({ loading: false, error: null });
+  },
+
+  resetPasswordForEmail: async (email: string) => {
+    set({ loading: true, error: null });
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    if (error) {
+      set({ loading: false, error: error.message });
+      throw error;
     }
     set({ loading: false, error: null });
   },

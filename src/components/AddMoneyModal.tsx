@@ -18,6 +18,8 @@ import { X } from 'lucide-react-native';
 import { useBoxStore } from '@/src/hooks/useBoxStore';
 import { UserBox } from '@/src/lib/database.types';
 
+type MoneyMode = 'add' | 'withdraw';
+
 interface AddMoneyModalProps {
   visible: boolean;
   onClose: () => void;
@@ -38,13 +40,14 @@ export default function AddMoneyModal({
   userBox,
   accentColor = '#1F96D3',
 }: AddMoneyModalProps) {
+  const [mode, setMode] = useState<MoneyMode>('add');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const insets = useSafeAreaInsets();
-  const { addTransaction } = useBoxStore();
+  const { addTransaction, withdrawFromBox } = useBoxStore();
 
-  const handleAddMoney = async () => {
+  const handleSubmit = async () => {
     if (!userBox) return;
 
     const numAmount = parseFloat(amount);
@@ -53,14 +56,26 @@ export default function AddMoneyModal({
       return;
     }
 
+    if (mode === 'withdraw') {
+      const balance = Number(userBox.current_amount);
+      if (numAmount > balance) {
+        Alert.alert('Error', `Not enough balance. Available: ${balance.toFixed(2)}`);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
-      await addTransaction(userBox.id, numAmount, note.trim() || null);
+      if (mode === 'add') {
+        await addTransaction(userBox.id, numAmount, note.trim() || null);
+      } else {
+        await withdrawFromBox(userBox.id, numAmount, note.trim() || null);
+      }
       setAmount('');
       setNote('');
       onClose();
     } catch (error: unknown) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to add transaction');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to save');
     } finally {
       setIsSubmitting(false);
     }
@@ -114,7 +129,24 @@ export default function AddMoneyModal({
                 className="flex-row justify-between items-center px-5 pb-2"
                 style={{ paddingTop: Math.max(insets.top, 16) }}
               >
-                <Text className="text-slate-800 text-2xl font-bold">Add Money</Text>
+                <View className="flex-row rounded-2xl bg-slate-100 p-1">
+                  <TouchableOpacity
+                    onPress={() => setMode('add')}
+                    className="rounded-xl px-4 py-2"
+                    style={{ backgroundColor: mode === 'add' ? '#fff' : 'transparent' }}
+                    activeOpacity={0.8}
+                  >
+                    <Text className={mode === 'add' ? 'text-slate-800 font-semibold' : 'text-slate-500'}>Add</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setMode('withdraw')}
+                    className="rounded-xl px-4 py-2"
+                    style={{ backgroundColor: mode === 'withdraw' ? '#fff' : 'transparent' }}
+                    activeOpacity={0.8}
+                  >
+                    <Text className={mode === 'withdraw' ? 'text-slate-800 font-semibold' : 'text-slate-500'}>Withdraw</Text>
+                  </TouchableOpacity>
+                </View>
                 <TouchableOpacity
                   onPress={() => onClose()}
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -132,11 +164,19 @@ export default function AddMoneyModal({
                 </View>
               ) : (
                 <>
+                  {mode === 'withdraw' && (
+                    <View className="px-5 mb-2">
+                      <Text className="text-slate-500 text-sm">Available</Text>
+                      <Text className="text-slate-800 text-lg font-semibold">
+                        {formatCurrency(String(Number(userBox.current_amount)))}
+                      </Text>
+                    </View>
+                  )}
                   <View className="px-5 mb-4">
                     <Text className="text-slate-500 text-sm mb-2">Amount</Text>
                     <View className="bg-white rounded-3xl p-6 items-center shadow-sm">
                       <Text className="text-slate-800 text-4xl font-bold">
-                        {formatCurrency(amount)}
+                        {mode === 'withdraw' && amount ? `−${formatCurrency(amount)}` : formatCurrency(amount)}
                       </Text>
                     </View>
                   </View>
@@ -178,19 +218,19 @@ export default function AddMoneyModal({
                       </TouchableOpacity>
                     ))}
                   </View>
-                    ))}
+                  ))}
                   </View>
 
                   <View className="px-5">
                     <TouchableOpacity
-                      onPress={handleAddMoney}
+                      onPress={handleSubmit}
                       className="rounded-3xl py-5 items-center"
-                      style={{ backgroundColor: accentColor }}
+                      style={{ backgroundColor: mode === 'withdraw' ? '#64748b' : accentColor }}
                       activeOpacity={0.8}
-                      disabled={!amount || parseFloat(amount) <= 0 || isSubmitting}
+                      disabled={!amount || parseFloat(amount) <= 0 || isSubmitting || (mode === 'withdraw' && parseFloat(amount) > Number(userBox.current_amount))}
                     >
                       <Text className="text-white text-lg font-bold">
-                        {isSubmitting ? 'Adding…' : 'Add Money'}
+                        {isSubmitting ? (mode === 'add' ? 'Adding…' : 'Withdrawing…') : mode === 'add' ? 'Add Money' : 'Withdraw'}
                       </Text>
                     </TouchableOpacity>
                   </View>

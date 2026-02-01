@@ -11,6 +11,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,12 +28,15 @@ import {
   MessageCircle,
   BarChart3,
   Plus,
+  Minus,
   Settings,
   Trash2,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/src/hooks/useAuthStore';
 import { useBoxStore } from '@/src/hooks/useBoxStore';
+import { useHomeCurrency } from '@/src/hooks/useHomeCurrency';
+import { useExchangeRates } from '@/src/hooks/useExchangeRates';
 import { useJarColor, JAR_COLOR_PRESETS, JarColorPreset } from '@/src/contexts/JarColorContext';
 import AddMoneyModal from '@/src/components/AddMoneyModal';
 import CreateGoalModal from '@/src/components/CreateGoalModal';
@@ -45,6 +49,7 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const PADDING_H = 16;
 const CARD_WIDTH = SCREEN_WIDTH - PADDING_H * 2;
 const HEADER_ESTIMATE = 96;
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'support@skarbonka.app';
 
 const PIGGY_IMAGE: ImageSourcePropType = require('../../assets/piggy-bank.png');
 
@@ -131,8 +136,10 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const { userBoxes, fetchUserBoxes, loading, getTransactionsForBox, deleteUserBox, deleteTransaction } = useBoxStore();
+  const { userBoxes, fetchUserBoxes, loading, getTransactionsForBox, getBalanceOverTimeForBox, deleteUserBox, deleteTransaction } = useBoxStore();
   const { getColorForBox, removeColorForBox } = useJarColor();
+  const { homeCurrency } = useHomeCurrency();
+  const { convertToHome } = useExchangeRates(homeCurrency);
 
   const [showAddMoneyModal, setShowAddMoneyModal] = useState(false);
   const [showCreateGoalModal, setShowCreateGoalModal] = useState(false);
@@ -167,6 +174,14 @@ export default function HomeScreen() {
     if (key === 'add') setShowAddMoneyModal(true);
     if (key === 'settings') setShowSettingsModal(true);
     if (key === 'stats') setShowStatsModal(true);
+  }, []);
+
+  const openSupport = useCallback(() => {
+    const subject = encodeURIComponent('Skarbonka Support');
+    const url = `mailto:${SUPPORT_EMAIL}?subject=${subject}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Could not open email app.');
+    });
   }, []);
 
   const handleBreakJar = useCallback(
@@ -330,6 +345,15 @@ export default function HomeScreen() {
                   <Text className="text-white text-4xl font-bold mt-1">
                     {`${boxBalance}${currencySym}`}
                   </Text>
+                  {homeCurrency && (box.currency ?? 'EUR') !== homeCurrency && (() => {
+                    const equiv = convertToHome(boxBalance, box.currency ?? null);
+                    if (equiv == null) return null;
+                    return (
+                      <Text className="text-white/80 text-sm mt-1">
+                        ≈ {equiv.toFixed(2)}{getCurrencySymbol(homeCurrency)}
+                      </Text>
+                    );
+                  })()}
                   {boxTarget > 0 && (
                     <View className="w-full px-4 mt-3">
                       <View className="h-2 bg-white/30 rounded-full overflow-hidden">
@@ -343,6 +367,26 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                   )}
+                  {/* Mini chart: balance over last 7 days */}
+                  {(() => {
+                    const chartData = getBalanceOverTimeForBox(box.id, 'week');
+                    if (chartData.length < 2) return null;
+                    const maxBal = Math.max(...chartData.map((d) => d.balance), 1);
+                    const chartHeight = 20;
+                    return (
+                      <View className="w-full px-2 mt-3 flex-row items-end justify-between" style={{ height: chartHeight }}>
+                        {chartData.map((d, i) => (
+                          <View
+                            key={d.date}
+                            className="flex-1 rounded-sm mx-0.5 bg-white/50"
+                            style={{
+                              height: maxBal > 0 ? Math.max(2, (d.balance / maxBal) * chartHeight) : 2,
+                            }}
+                          />
+                        ))}
+                      </View>
+                    );
+                  })()}
                   {isFull && <BreakJarCta />}
                   {!(boxTarget > 0) && (
                     <View className="mt-2 rounded-full px-5 py-2 bg-white/20">
@@ -422,19 +466,31 @@ export default function HomeScreen() {
                         )}
                       >
                         <View className="flex-row items-center px-5 py-4 border-b border-slate-100 bg-white">
-                          <View className="w-10 h-10 rounded-xl bg-primary-50 items-center justify-center">
-                            <Plus size={20} color="#1F96D3" strokeWidth={2} />
+                          <View
+                            className="w-10 h-10 rounded-xl items-center justify-center"
+                            style={{ backgroundColor: Number(tx.amount) < 0 ? '#fef2f2' : '#eff6ff' }}
+                          >
+                            {Number(tx.amount) < 0 ? (
+                              <Minus size={20} color="#dc2626" strokeWidth={2} />
+                            ) : (
+                              <Plus size={20} color="#1F96D3" strokeWidth={2} />
+                            )}
                           </View>
                           <View className="flex-1 ml-4">
                             <Text className="text-slate-800 font-medium">
-                              {tx.note || 'Deposit'}
+                              {tx.note || (Number(tx.amount) < 0 ? 'Withdrawal' : 'Deposit')}
                             </Text>
                             <Text className="text-slate-400 text-sm mt-0.5">
                               {formatTransactionDate(tx.date)}
                             </Text>
                           </View>
-                          <Text className="text-green-600 font-semibold">
-                            +{Number(tx.amount).toFixed(2)} {currencySym}
+                          <Text
+                            className={
+                              Number(tx.amount) < 0 ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'
+                            }
+                          >
+                            {Number(tx.amount) < 0 ? '−' : '+'}
+                            {Math.abs(Number(tx.amount)).toFixed(2)} {currencySym}
                           </Text>
                         </View>
                       </Swipeable>
@@ -446,7 +502,7 @@ export default function HomeScreen() {
         </View>
       );
     },
-    [slideHeight, getColorForBox, handleBreakJar, getTransactionsForBox, deleteTransaction, handleAction]
+    [slideHeight, getColorForBox, handleBreakJar, getTransactionsForBox, getBalanceOverTimeForBox, deleteTransaction, handleAction, homeCurrency, convertToHome]
   );
 
   return (
@@ -473,6 +529,7 @@ export default function HomeScreen() {
                 <Text className="text-white font-semibold text-sm">{initials}</Text>
               </TouchableOpacity>
               <TouchableOpacity
+                onPress={openSupport}
                 className="w-10 h-10 rounded-full bg-white/20 items-center justify-center"
                 activeOpacity={0.8}
               >

@@ -1,6 +1,17 @@
 import { create } from 'zustand';
 import { UserBox, Transaction, BoxTemplate, TransactionInsert, UserBoxInsert } from '@/src/lib/database.types';
 import { supabase } from '@/src/lib/supabase';
+import {
+  getOfflineQueue,
+  setOfflineQueue,
+  addToOfflineQueue,
+  getCachedBoxes,
+  setCachedBoxes,
+  getCachedTransactions,
+  setCachedTransactions,
+  isLikelyNetworkError,
+} from '@/src/lib/offlineQueue';
+import { getRates } from '@/src/lib/currencyApi';
 import { useAuthStore } from './useAuthStore';
 
 // Type for UserBox with joined template data
@@ -28,16 +39,22 @@ interface BoxStore {
   getTotalSavedThisMonth: () => number;
   
   // Supabase async actions
+  processOfflineQueue: () => Promise<void>;
   fetchUserBoxes: () => Promise<void>;
   fetchTransactions: () => Promise<void>;
   addTransaction: (boxId: string, amount: number, note?: string | null) => Promise<void>;
+  withdrawFromBox: (boxId: string, amount: number, note?: string | null) => Promise<void>;
   resetBoxBalance: (boxId: string) => Promise<void>;
   crossOutIndex: (boxId: string, index: number) => Promise<void>;
   createBoxFromTemplate: (templateId: string, name?: string) => Promise<void>;
   createUserBox: (name: string, targetAmount?: number | null, currency?: string | null) => Promise<string | null>;
   archiveUserBox: (boxId: string) => Promise<void>;
+  unarchiveUserBox: (boxId: string) => Promise<void>;
   deleteUserBox: (boxId: string) => Promise<void>;
   updateBoxName: (boxId: string, name: string) => Promise<void>;
+  updateBoxTargetAmount: (boxId: string, targetAmount: number | null) => Promise<void>;
+  updateBoxCurrency: (boxId: string, currency: string) => Promise<void>;
+  updateBoxCurrencyWithConversion: (boxId: string, newCurrency: string) => Promise<void>;
   deleteTransaction: (transactionId: string) => Promise<void>;
   
   // Legacy sync methods (kept for backward compatibility)
@@ -193,9 +210,35 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
   // SUPABASE ASYNC ACTIONS
   // ============================================
 
+  processOfflineQueue: async () => {
+    let queue = await getOfflineQueue();
+    while (queue.length > 0) {
+      const item = queue[0];
+      const amount = item.action === 'withdraw' ? -Math.abs(item.amount) : Math.abs(item.amount);
+      const { error } = await supabase
+        .from('transactions')
+        .insert({
+          box_id: item.boxId,
+          amount,
+          note: item.note ?? null,
+          date: item.date,
+        } as never);
+      if (error) {
+        console.warn('Offline queue item failed, will retry:', error.message);
+        break;
+      }
+      queue = queue.slice(1);
+      await setOfflineQueue(queue);
+    }
+  },
+
   fetchUserBoxes: async () => {
     set({ loading: true, error: null });
-    
+    try {
+      await get().processOfflineQueue();
+    } catch (_) {
+      // ignore
+    }
     try {
       const { data, error } = await supabase
         .from('user_boxes')
@@ -206,17 +249,22 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
         throw error;
       }
 
-      // Transform the joined result to UserBox[] (flatten the template data if needed)
       const boxes: UserBox[] = (data as UserBoxWithTemplate[]).map((item) => ({
         ...item,
-        // Keep box_templates in the object if needed for UI, but type it as UserBox
       })) as UserBox[];
 
       set({ userBoxes: boxes, loading: false });
+      await setCachedBoxes(boxes);
       await get().fetchTransactions();
     } catch (err: any) {
       console.error('Error fetching user boxes:', err);
-      set({ error: err.message || 'Failed to fetch boxes', loading: false });
+      const cached = await getCachedBoxes();
+      if (cached && cached.length >= 0) {
+        set({ userBoxes: cached, loading: false });
+        await get().fetchTransactions();
+      } else {
+        set({ error: err.message || 'Failed to fetch boxes', loading: false });
+      }
     }
   },
 
@@ -233,9 +281,13 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
         .in('box_id', boxIds)
         .order('date', { ascending: false });
       if (error) throw error;
-      set({ transactions: (data ?? []) as Transaction[] });
+      const tx = (data ?? []) as Transaction[];
+      set({ transactions: tx });
+      await setCachedTransactions(tx);
     } catch (err) {
       console.error('Error fetching transactions:', err);
+      const cached = await getCachedTransactions();
+      if (cached) set({ transactions: cached });
     }
   },
 
@@ -280,7 +332,27 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
         .single();
 
       if (txError) {
-        // Rollback optimistic update on error
+        if (isLikelyNetworkError(txError)) {
+          await addToOfflineQueue({
+            action: 'add',
+            boxId,
+            amount,
+            note: note ?? null,
+            date: new Date().toISOString(),
+          });
+          const tempTx: Transaction = {
+            id: `offline_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+            box_id: boxId,
+            amount,
+            note: note ?? null,
+            date: new Date().toISOString(),
+          };
+          set((prevState) => ({
+            transactions: [tempTx, ...prevState.transactions],
+          }));
+          set({ loading: false });
+          return;
+        }
         set((prevState) => ({
           userBoxes: prevState.userBoxes.map((b) =>
             b.id === boxId ? box : b
@@ -303,6 +375,85 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
     } catch (err: any) {
       console.error('Error adding transaction:', err);
       set({ error: err.message || 'Failed to add transaction', loading: false });
+    }
+  },
+
+  withdrawFromBox: async (boxId: string, amount: number, note?: string | null) => {
+    set({ loading: true, error: null });
+
+    try {
+      const state = get();
+      const box = state.userBoxes.find((b) => b.id === boxId);
+      if (!box) throw new Error('Box not found');
+
+      const absAmount = Math.abs(amount);
+      const current = Number(box.current_amount);
+      if (absAmount <= 0 || current < absAmount) {
+        throw new Error(current < absAmount ? 'Not enough balance' : 'Enter a valid amount');
+      }
+
+      const newAmount = current - absAmount;
+
+      set((prevState) => ({
+        userBoxes: prevState.userBoxes.map((b) =>
+          b.id === boxId
+            ? { ...b, current_amount: newAmount, updated_at: new Date().toISOString() }
+            : b
+        ),
+      }));
+
+      const transactionInsert: TransactionInsert = {
+        box_id: boxId,
+        amount: -absAmount,
+        note: note ?? null,
+        date: new Date().toISOString(),
+      };
+
+      const { data: transactionData, error: txError } = await supabase
+        .from('transactions')
+        .insert(transactionInsert as any)
+        .select()
+        .single();
+
+      if (txError) {
+        if (isLikelyNetworkError(txError)) {
+          await addToOfflineQueue({
+            action: 'withdraw',
+            boxId,
+            amount: absAmount,
+            note: note ?? null,
+            date: new Date().toISOString(),
+          });
+          const tempTx: Transaction = {
+            id: `offline_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+            box_id: boxId,
+            amount: -absAmount,
+            note: note ?? null,
+            date: new Date().toISOString(),
+          };
+          set((prevState) => ({
+            transactions: [tempTx, ...prevState.transactions],
+          }));
+          set({ loading: false });
+          return;
+        }
+        set((prevState) => ({
+          userBoxes: prevState.userBoxes.map((b) => (b.id === boxId ? box : b)),
+        }));
+        throw txError;
+      }
+
+      if (transactionData) {
+        set((prevState) => ({
+          transactions: [...prevState.transactions, transactionData as Transaction],
+        }));
+      }
+
+      set({ loading: false });
+    } catch (err: any) {
+      console.error('Error withdrawing:', err);
+      set({ error: err?.message ?? 'Failed to withdraw', loading: false });
+      throw err;
     }
   },
 
@@ -502,6 +653,26 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
     set({ loading: false });
   },
 
+  unarchiveUserBox: async (boxId: string) => {
+    set({ loading: true, error: null });
+    try {
+      const { error } = await supabase
+        .from('user_boxes')
+        .update({ is_archived: false, updated_at: new Date().toISOString() } as never)
+        .eq('id', boxId);
+      if (error) throw error;
+      set((state) => ({
+        userBoxes: state.userBoxes.map((b) =>
+          b.id === boxId ? { ...b, is_archived: false, updated_at: new Date().toISOString() } : b
+        ),
+      }));
+    } catch (err: any) {
+      set({ error: err.message ?? 'Failed to restore', loading: false });
+      throw err;
+    }
+    set({ loading: false });
+  },
+
   updateBoxName: async (boxId: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -519,6 +690,95 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
       }));
     } catch (err: any) {
       set({ error: err.message ?? 'Failed to update name', loading: false });
+      throw err;
+    }
+    set({ loading: false });
+  },
+
+  updateBoxTargetAmount: async (boxId: string, targetAmount: number | null) => {
+    set({ loading: true, error: null });
+    try {
+      const { error } = await supabase
+        .from('user_boxes')
+        .update({ target_amount: targetAmount, updated_at: new Date().toISOString() } as never)
+        .eq('id', boxId);
+      if (error) throw error;
+      set((state) => ({
+        userBoxes: state.userBoxes.map((b) =>
+          b.id === boxId
+            ? { ...b, target_amount: targetAmount, updated_at: new Date().toISOString() }
+            : b
+        ),
+      }));
+    } catch (err: any) {
+      set({ error: err?.message ?? 'Failed to update target', loading: false });
+      throw err;
+    }
+    set({ loading: false });
+  },
+
+  updateBoxCurrency: async (boxId: string, currency: string) => {
+    const code = (currency?.trim() || 'EUR').toUpperCase();
+    set({ loading: true, error: null });
+    try {
+      const { error } = await supabase
+        .from('user_boxes')
+        .update({ currency: code, updated_at: new Date().toISOString() } as never)
+        .eq('id', boxId);
+      if (error) throw error;
+      set((state) => ({
+        userBoxes: state.userBoxes.map((b) =>
+          b.id === boxId ? { ...b, currency: code, updated_at: new Date().toISOString() } : b
+        ),
+      }));
+    } catch (err: any) {
+      set({ error: err?.message ?? 'Failed to update currency', loading: false });
+      throw err;
+    }
+    set({ loading: false });
+  },
+
+  updateBoxCurrencyWithConversion: async (boxId: string, newCurrency: string) => {
+    const toCode = (newCurrency?.trim() || 'EUR').toUpperCase();
+    set({ loading: true, error: null });
+    try {
+      const state = get();
+      const box = state.userBoxes.find((b) => b.id === boxId);
+      if (!box) throw new Error('Box not found');
+      const fromCode = (box.currency ?? 'EUR').toUpperCase();
+      const currentAmount = Number(box.current_amount);
+
+      if (fromCode === toCode) {
+        set({ loading: false });
+        return;
+      }
+
+      const rates = await getRates(fromCode);
+      const rateToNew = rates[toCode];
+      if (rateToNew == null || rateToNew <= 0) {
+        throw new Error('Conversion not available for this currency. Check your connection.');
+      }
+      const convertedAmount = Math.round(currentAmount * rateToNew * 100) / 100;
+
+      const { error } = await supabase
+        .from('user_boxes')
+        .update({
+          currency: toCode,
+          current_amount: convertedAmount,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq('id', boxId);
+
+      if (error) throw error;
+      set((s) => ({
+        userBoxes: s.userBoxes.map((b) =>
+          b.id === boxId
+            ? { ...b, currency: toCode, current_amount: convertedAmount, updated_at: new Date().toISOString() }
+            : b
+        ),
+      }));
+    } catch (err: any) {
+      set({ error: err?.message ?? 'Failed to update currency', loading: false });
       throw err;
     }
     set({ loading: false });

@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -28,6 +29,7 @@ export default function LoginScreen() {
     signUp,
     signInWithGoogle,
     resendConfirmation,
+    resetPasswordForEmail,
     loading,
     error,
     clearError,
@@ -35,6 +37,9 @@ export default function LoginScreen() {
   } = useAuthStore();
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSending, setForgotSending] = useState(false);
 
   useEffect(() => {
     if (error) {
@@ -74,6 +79,24 @@ export default function LoginScreen() {
         'Check your email',
         'We sent you a confirmation link. Please verify your email to continue.'
       );
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!forgotEmail.trim()) {
+      Alert.alert('Error', 'Enter your email address');
+      return;
+    }
+    setForgotSending(true);
+    try {
+      await resetPasswordForEmail(forgotEmail.trim());
+      Alert.alert('Check your email', 'We sent you a link to reset your password.');
+      setShowForgotPassword(false);
+      setForgotEmail('');
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to send reset link');
+    } finally {
+      setForgotSending(false);
     }
   };
 
@@ -196,7 +219,7 @@ export default function LoginScreen() {
             <TouchableOpacity
               onPress={handleAuth}
               disabled={loading}
-              className="rounded-3xl py-5 items-center shadow-sm mb-4"
+              className="rounded-3xl py-5 items-center shadow-sm mb-2"
               style={{ backgroundColor: '#1F96D3' }}
               activeOpacity={0.8}
             >
@@ -208,6 +231,16 @@ export default function LoginScreen() {
                 </Text>
               )}
             </TouchableOpacity>
+
+            {!isSignUp && (
+              <TouchableOpacity
+                onPress={() => setShowForgotPassword(true)}
+                className="py-2 mb-2"
+                activeOpacity={0.8}
+              >
+                <Text className="text-center text-white/80 text-sm">Forgot password?</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Toggle */}
             <TouchableOpacity
@@ -276,6 +309,55 @@ export default function LoginScreen() {
         </KeyboardAvoidingView>
       </SafeAreaView>
       </LinearGradient>
+
+      {/* Forgot password modal */}
+      <Modal visible={showForgotPassword} transparent animationType="fade">
+        <View className="flex-1 bg-black/50 justify-center px-6">
+          <View className="bg-white rounded-3xl p-6">
+            <Text className="text-slate-800 text-xl font-bold mb-1">Reset password</Text>
+            <Text className="text-slate-500 text-sm mb-4">
+              Enter your email and we'll send you a link to reset your password.
+            </Text>
+            <TextInput
+              className="border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-base mb-4"
+              placeholder="Email"
+              placeholderTextColor="#94a3b8"
+              value={forgotEmail}
+              onChangeText={setForgotEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              editable={!forgotSending}
+            />
+            <View className="flex-row gap-3">
+              <TouchableOpacity
+                onPress={() => {
+                  setShowForgotPassword(false);
+                  setForgotEmail('');
+                }}
+                disabled={forgotSending}
+                className="flex-1 rounded-xl py-3.5 bg-slate-100 items-center"
+                activeOpacity={0.8}
+              >
+                <Text className="text-slate-700 font-semibold">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleForgotPassword}
+                disabled={forgotSending}
+                className="flex-1 rounded-xl py-3.5 items-center"
+                style={{ backgroundColor: '#1F96D3' }}
+                activeOpacity={0.8}
+              >
+                {forgotSending ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text className="text-white font-semibold">Send link</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

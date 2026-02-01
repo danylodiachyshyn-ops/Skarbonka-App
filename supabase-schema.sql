@@ -80,12 +80,13 @@ CREATE POLICY "Users delete own boxes" ON user_boxes FOR DELETE USING (auth.uid(
 
 -- ============================================
 -- 5. ТАБЛИЦЯ ТРАНЗАКЦІЙ (Transactions)
--- Історія поповнень
+-- Історія поповнень та витягувань (amount > 0 = поповнення, amount < 0 = витягування)
+-- Якщо вже створено з CHECK (amount > 0), виконайте supabase-migrations/allow-withdrawals.sql
 -- ============================================
 CREATE TABLE public.transactions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   box_id UUID NOT NULL REFERENCES user_boxes(id) ON DELETE CASCADE,
-  amount DECIMAL(12, 2) NOT NULL CHECK (amount > 0),
+  amount DECIMAL(12, 2) NOT NULL,
   note TEXT, -- Наприклад "Закреслив 50 грн"
   date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
