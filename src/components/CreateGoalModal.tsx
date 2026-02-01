@@ -13,6 +13,7 @@ import {
 import { X, Currency } from 'lucide-react-native';
 import { useBoxStore } from '@/src/hooks/useBoxStore';
 import { useAuthStore } from '@/src/hooks/useAuthStore';
+import { useLanguageContext } from '@/src/contexts/LanguageContext';
 import { useJarColor, JAR_COLOR_PRESETS, JarColorPreset } from '@/src/contexts/JarColorContext';
 
 interface CreateGoalModalProps {
@@ -21,18 +22,18 @@ interface CreateGoalModalProps {
   onGoalCreated?: () => void;
 }
 
-const PRESET_OPTIONS: { key: JarColorPreset; label: string }[] = [
-  { key: 'emerald', label: 'Emerald' },
-  { key: 'ocean', label: 'Ocean Blue' },
-  { key: 'sunset', label: 'Sunset Orange' },
-  { key: 'slate', label: 'Slate' },
+const PRESET_OPTIONS: { key: JarColorPreset; labelKey: string }[] = [
+  { key: 'emerald', labelKey: 'settings.presetEmerald' },
+  { key: 'ocean', labelKey: 'settings.presetOcean' },
+  { key: 'sunset', labelKey: 'settings.presetSunset' },
+  { key: 'slate', labelKey: 'settings.presetSlate' },
 ];
 
-const CURRENCY_OPTIONS: { code: string; label: string }[] = [
-  { code: 'EUR', label: '€ Euro' },
-  { code: 'USD', label: '$ US Dollar' },
-  { code: 'UAH', label: '₴ Hryvnia' },
-  { code: 'GBP', label: '£ British Pound' },
+const CURRENCY_OPTIONS: { code: string; labelKey: string }[] = [
+  { code: 'EUR', labelKey: 'currency.eur' },
+  { code: 'USD', labelKey: 'currency.usd' },
+  { code: 'UAH', labelKey: 'currency.uah' },
+  { code: 'GBP', labelKey: 'currency.gbp' },
 ];
 
 export default function CreateGoalModal({
@@ -50,21 +51,22 @@ export default function CreateGoalModal({
   const { user } = useAuthStore();
   const { createUserBox } = useBoxStore();
   const { setColorForBox } = useJarColor();
+  const { t } = useLanguageContext();
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'Please enter a goal name');
+      Alert.alert(t('common.error'), t('createGoal.pleaseEnterGoalName'));
       return;
     }
 
     if (!user) {
-      Alert.alert('Error', 'You must be logged in to create a goal');
+      Alert.alert(t('common.error'), t('createGoal.mustBeLoggedIn'));
       return;
     }
 
     const target = targetAmount.trim() ? parseFloat(targetAmount) : null;
     if (targetAmount.trim() && (isNaN(target!) || target! <= 0)) {
-      Alert.alert('Error', 'Please enter a valid target amount');
+      Alert.alert(t('common.error'), t('createGoal.enterValidTargetAmount'));
       return;
     }
 
@@ -83,7 +85,7 @@ export default function CreateGoalModal({
       onClose();
       onGoalCreated?.();
     } catch (error: unknown) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to create goal');
+      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('createGoal.failedToCreate'));
     } finally {
       setIsSubmitting(false);
     }
@@ -104,17 +106,17 @@ export default function CreateGoalModal({
           <View className="bg-white rounded-t-3xl pt-6 pb-8 max-h-[90%]">
             <ScrollView showsVerticalScrollIndicator={false}>
               <View className="flex-row justify-between items-center px-6 mb-6">
-                <Text className="text-2xl font-bold text-gray-900">Create New Goal</Text>
+                <Text className="text-2xl font-bold text-gray-900">{t('createGoal.title')}</Text>
                 <TouchableOpacity onPress={onClose} className="p-2">
                   <X size={24} color="#6b7280" />
                 </TouchableOpacity>
               </View>
 
               <View className="px-6 mb-6">
-                <Text className="text-gray-500 text-sm mb-2">Goal Name</Text>
+                <Text className="text-gray-500 text-sm mb-2">{t('createGoal.goalName')}</Text>
                 <TextInput
                   className="bg-gray-50 rounded-2xl px-4 py-4 text-gray-900 text-base"
-                  placeholder="e.g., Vacation, New Laptop"
+                  placeholder={t('createGoal.placeholderGoalName')}
                   placeholderTextColor="#9ca3af"
                   value={name}
                   onChangeText={setName}
@@ -123,10 +125,10 @@ export default function CreateGoalModal({
               </View>
 
               <View className="px-6 mb-6">
-                <Text className="text-gray-500 text-sm mb-2">Target Amount</Text>
+                <Text className="text-gray-500 text-sm mb-2">{t('createGoal.targetAmount')}</Text>
                 <TextInput
                   className="bg-gray-50 rounded-2xl px-4 py-4 text-gray-900 text-base"
-                  placeholder="0"
+                  placeholder={t('createGoal.placeholderTarget')}
                   placeholderTextColor="#9ca3af"
                   value={targetAmount}
                   onChangeText={setTargetAmount}
@@ -135,25 +137,26 @@ export default function CreateGoalModal({
               </View>
 
               <View className="px-6 mb-6">
-                <Text className="text-gray-500 text-sm mb-3">Currency</Text>
+                <Text className="text-gray-500 text-sm mb-3">{t('createGoal.currency')}</Text>
                 <View className="flex-row flex-wrap gap-3">
-                  {CURRENCY_OPTIONS.map(({ code, label }) => {
+                  {CURRENCY_OPTIONS.map(({ code, labelKey }) => {
                     const isSelected = selectedCurrency === code;
                     return (
                       <TouchableOpacity
                         key={code}
                         onPress={() => setSelectedCurrency(code)}
-                        className="rounded-2xl overflow-hidden"
-                        style={{
-                          width: '47%',
-                          borderWidth: isSelected ? 3 : 0,
-                          borderColor: JAR_COLOR_PRESETS[selectedPreset].button,
-                        }}
                         activeOpacity={0.8}
+                        style={{ width: '47%' }}
                       >
-                        <View className="h-14 rounded-2xl items-center justify-center bg-gray-100 flex-row gap-2">
+                        <View
+                          className="h-12 rounded-2xl items-center justify-center bg-slate-100 flex-row gap-2"
+                          style={{
+                            borderWidth: 2,
+                            borderColor: isSelected ? '#1e40af' : 'transparent',
+                          }}
+                        >
                           <Currency size={20} color="#4b5563" strokeWidth={2} />
-                          <Text className="text-gray-800 font-semibold">{label}</Text>
+                          <Text className="text-slate-800 font-semibold">{t(labelKey)}</Text>
                         </View>
                       </TouchableOpacity>
                     );
@@ -162,28 +165,27 @@ export default function CreateGoalModal({
               </View>
 
               <View className="px-6 mb-6">
-                <Text className="text-gray-500 text-sm mb-3">Jar color</Text>
+                <Text className="text-gray-500 text-sm mb-3">{t('createGoal.jarColor')}</Text>
                 <View className="flex-row flex-wrap gap-3">
-                  {PRESET_OPTIONS.map(({ key, label }) => {
+                  {PRESET_OPTIONS.map(({ key, labelKey }) => {
                     const colors = JAR_COLOR_PRESETS[key];
                     const isSelected = selectedPreset === key;
                     return (
                       <TouchableOpacity
                         key={key}
                         onPress={() => setSelectedPreset(key)}
-                        className="rounded-2xl overflow-hidden"
-                        style={{
-                          width: '47%',
-                          borderWidth: isSelected ? 3 : 0,
-                          borderColor: colors.button,
-                        }}
-                        activeOpacity={0.8}
+                        activeOpacity={0.85}
+                        style={{ width: '47%' }}
                       >
                         <View
                           className="h-14 rounded-2xl items-center justify-center"
-                          style={{ backgroundColor: colors.button }}
+                          style={{
+                            backgroundColor: colors.button,
+                            borderWidth: isSelected ? 2 : 0,
+                            borderColor: 'rgba(0,0,0,0.25)',
+                          }}
                         >
-                          <Text className="text-white font-semibold">{label}</Text>
+                          <Text className="text-white font-semibold">{t(labelKey)}</Text>
                         </View>
                       </TouchableOpacity>
                     );
@@ -200,7 +202,7 @@ export default function CreateGoalModal({
                   disabled={!name.trim() || isSubmitting}
                 >
                   <Text className="text-white text-lg font-bold">
-                    {isSubmitting ? 'Creating...' : 'Create Goal'}
+                    {isSubmitting ? t('createGoal.creating') : t('createGoal.createGoal')}
                   </Text>
                 </TouchableOpacity>
               </View>

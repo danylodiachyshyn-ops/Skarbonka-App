@@ -35,6 +35,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/src/hooks/useAuthStore';
 import { useBoxStore } from '@/src/hooks/useBoxStore';
+import { useLanguageContext } from '@/src/contexts/LanguageContext';
 import { useHomeCurrency } from '@/src/hooks/useHomeCurrency';
 import { useExchangeRates } from '@/src/hooks/useExchangeRates';
 import { useJarColor, JAR_COLOR_PRESETS, JarColorPreset } from '@/src/contexts/JarColorContext';
@@ -44,6 +45,7 @@ import SettingsModal from '@/src/components/SettingsModal';
 import StatisticsModal from '@/src/components/StatisticsModal';
 import { UserBox } from '@/src/lib/database.types';
 import { Transaction } from '@/src/lib/database.types';
+import { formatTransactionDate } from '@/src/lib/dateFormat';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PADDING_H = 16;
@@ -53,10 +55,10 @@ const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'support@skarbonk
 
 const PIGGY_IMAGE: ImageSourcePropType = require('../../assets/piggy-bank.png');
 
-const ACTION_BUTTONS = [
-  { key: 'add', label: 'Add money', Icon: Plus },
-  { key: 'stats', label: 'Statistics', Icon: BarChart3 },
-  { key: 'settings', label: 'Settings', Icon: Settings },
+const ACTION_BUTTON_KEYS = [
+  { key: 'add', labelKey: 'home.addMoney', Icon: Plus },
+  { key: 'stats', labelKey: 'home.statistics', Icon: BarChart3 },
+  { key: 'settings', labelKey: 'home.settings', Icon: Settings },
 ] as const;
 
 type DisplayItem =
@@ -81,10 +83,11 @@ function BreakJarCta() {
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
+  const { t } = useLanguageContext();
   return (
     <Animated.View style={[animatedStyle, { marginTop: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.3)' }]}>
       <Text className="text-white text-center text-base font-bold" style={{ textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>
-        Tap to break the jar!
+        {t('home.tapToBreakJar')}
       </Text>
     </Animated.View>
   );
@@ -115,14 +118,6 @@ function ShakingPiggy({ isFull, children }: { isFull: boolean; children: React.R
   return <Animated.View style={animatedStyle}>{children}</Animated.View>;
 }
 
-function formatTransactionDate(dateStr: string) {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const isToday = d.toDateString() === now.toDateString();
-  if (isToday) return `Today, ${d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })}`;
-  return d.toLocaleDateString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
 function getCurrencySymbol(code: string | null | undefined): string {
   const c = (code ?? 'EUR').toUpperCase();
   if (c === 'EUR') return '€';
@@ -140,6 +135,7 @@ export default function HomeScreen() {
   const { getColorForBox, removeColorForBox } = useJarColor();
   const { homeCurrency } = useHomeCurrency();
   const { convertToHome } = useExchangeRates(homeCurrency);
+  const { t, language } = useLanguageContext();
 
   const [showAddMoneyModal, setShowAddMoneyModal] = useState(false);
   const [showCreateGoalModal, setShowCreateGoalModal] = useState(false);
@@ -180,19 +176,19 @@ export default function HomeScreen() {
     const subject = encodeURIComponent('Skarbonka Support');
     const url = `mailto:${SUPPORT_EMAIL}?subject=${subject}`;
     Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open email app.');
+      Alert.alert(t('common.error'), t('home.couldNotOpenEmail'));
     });
-  }, []);
+  }, [t]);
 
   const handleBreakJar = useCallback(
     (boxId: string) => {
       Alert.alert(
-        'Break the jar?',
-        'The jar and its transaction history will be removed.',
+        t('home.breakTheJar'),
+        t('home.breakTheJarConfirm'),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Break',
+            text: t('home.break'),
             style: 'destructive',
             onPress: async () => {
               const idx = activeBoxes.findIndex((b) => b.id === boxId);
@@ -206,7 +202,7 @@ export default function HomeScreen() {
         ]
       );
     },
-    [activeBoxes, deleteUserBox, fetchUserBoxes, removeColorForBox]
+    [activeBoxes, deleteUserBox, fetchUserBoxes, removeColorForBox, t]
   );
 
   const onMomentumScrollEnd = useCallback(
@@ -264,12 +260,12 @@ export default function HomeScreen() {
                   <View className="w-20 h-20 rounded-full bg-white/20 items-center justify-center mb-4">
                     <Plus size={40} color="#fff" strokeWidth={2} />
                   </View>
-                  <Text className="text-white text-xl font-semibold">New piggy bank</Text>
-                  <Text className="text-white/70 text-sm mt-2">Swipe right to add a goal</Text>
+                  <Text className="text-white text-xl font-semibold">{t('home.newPiggyBank')}</Text>
+                  <Text className="text-white/70 text-sm mt-2">{t('home.swipeRightToAdd')}</Text>
                 </LinearGradient>
               </TouchableOpacity>
               <View className="flex-row justify-around py-4">
-                {ACTION_BUTTONS.map(({ key, label, Icon }) => (
+                {ACTION_BUTTON_KEYS.map(({ key, labelKey, Icon }) => (
                   <TouchableOpacity
                     key={key}
                     onPress={() => handleAction(key)}
@@ -279,7 +275,7 @@ export default function HomeScreen() {
                     <View className="w-14 h-14 rounded-3xl bg-white/20 items-center justify-center">
                       <Icon size={26} color="#fff" strokeWidth={2} />
                     </View>
-                    <Text className="text-white/90 text-xs mt-2 font-medium">{label}</Text>
+                    <Text className="text-white/90 text-xs mt-2 font-medium">{t(labelKey)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -363,7 +359,7 @@ export default function HomeScreen() {
                         />
                       </View>
                       <Text className="text-white/80 text-xs mt-1.5 text-center">
-                        {boxBalance}{currencySym} of {Number(boxTarget)}{currencySym}
+                        {boxBalance}{currencySym} {t('home.of')} {Number(boxTarget)}{currencySym}
                       </Text>
                     </View>
                   )}
@@ -390,14 +386,14 @@ export default function HomeScreen() {
                   {isFull && <BreakJarCta />}
                   {!(boxTarget > 0) && (
                     <View className="mt-2 rounded-full px-5 py-2 bg-white/20">
-                      <Text className="text-white font-medium">Bills</Text>
+                      <Text className="text-white font-medium">{t('home.bills')}</Text>
                     </View>
                   )}
                 </View>
               </LinearGradient>
             </TouchableOpacity>
             <View className="flex-row justify-around py-4">
-              {ACTION_BUTTONS.map(({ key, label, Icon }) => (
+              {ACTION_BUTTON_KEYS.map(({ key, labelKey, Icon }) => (
                 <TouchableOpacity
                   key={key}
                   onPress={() => handleAction(key)}
@@ -414,17 +410,22 @@ export default function HomeScreen() {
                   >
                     <Icon size={26} color="#fff" strokeWidth={2} />
                   </View>
-                  <Text className="text-white/90 text-xs mt-2 font-medium">{label}</Text>
+                  <Text className="text-white/90 text-xs mt-2 font-medium">{t(labelKey)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
             <View className="mt-0">
-              <Text className="text-white/90 font-semibold text-lg mb-3">Recent Activity</Text>
-              <View className="bg-white rounded-3xl overflow-hidden shadow-sm">
+              <Text className="text-white/90 font-semibold text-lg mb-3">{t('home.recentActivity')}</Text>
+              <LinearGradient
+                colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={{ borderRadius: 24, overflow: 'hidden' }}
+              >
                 {getTransactionsForBox(box.id).length === 0 ? (
                   <View className="p-6 items-center">
-                    <Text className="text-slate-500">No transactions yet</Text>
-                    <Text className="text-slate-400 text-sm mt-1">Add money to see activity</Text>
+                    <Text className="text-white/90">{t('home.noTransactions')}</Text>
+                    <Text className="text-white/70 text-sm mt-1">{t('home.addMoneyToSeeActivity')}</Text>
                   </View>
                 ) : (
                   getTransactionsForBox(box.id)
@@ -446,12 +447,12 @@ export default function HomeScreen() {
                               onPress={() => {
                                 swipeable.close();
                                 Alert.alert(
-                                  'Delete transaction',
-                                  'Are you sure you want to delete this transaction? This will remove it from the jar and reduce the balance.',
+                                  t('home.deleteTransaction'),
+                                  t('home.areYouSureDeleteTransaction'),
                                   [
-                                    { text: 'Cancel', style: 'cancel' },
+                                    { text: t('common.cancel'), style: 'cancel' },
                                     {
-                                      text: 'Delete',
+                                      text: t('common.delete'),
                                       style: 'destructive',
                                       onPress: () => deleteTransaction(tx.id),
                                     },
@@ -460,15 +461,15 @@ export default function HomeScreen() {
                               }}
                             >
                               <Trash2 size={22} color="#fff" strokeWidth={2} />
-                              <Text className="text-white text-xs font-medium mt-1">Delete</Text>
+                              <Text className="text-white text-xs font-medium mt-1">{t('common.delete')}</Text>
                             </RectButton>
                           </View>
                         )}
                       >
-                        <View className="flex-row items-center px-5 py-4 border-b border-slate-100 bg-white">
+                        <View className="flex-row items-center px-5 py-4 border-b border-white/20">
                           <View
                             className="w-10 h-10 rounded-xl items-center justify-center"
-                            style={{ backgroundColor: Number(tx.amount) < 0 ? '#fef2f2' : '#eff6ff' }}
+                            style={{ backgroundColor: Number(tx.amount) < 0 ? 'rgba(254,226,226,0.9)' : 'rgba(239,246,255,0.9)' }}
                           >
                             {Number(tx.amount) < 0 ? (
                               <Minus size={20} color="#dc2626" strokeWidth={2} />
@@ -477,16 +478,16 @@ export default function HomeScreen() {
                             )}
                           </View>
                           <View className="flex-1 ml-4">
-                            <Text className="text-slate-800 font-medium">
-                              {tx.note || (Number(tx.amount) < 0 ? 'Withdrawal' : 'Deposit')}
+                            <Text className="text-white font-medium">
+                              {tx.note || (Number(tx.amount) < 0 ? t('home.withdrawal') : t('home.deposit'))}
                             </Text>
-                            <Text className="text-slate-400 text-sm mt-0.5">
-                              {formatTransactionDate(tx.date)}
+                            <Text className="text-white/80 text-sm mt-0.5">
+                              {formatTransactionDate(tx.date, language, { todayLabel: t('home.today') })}
                             </Text>
                           </View>
                           <Text
                             className={
-                              Number(tx.amount) < 0 ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'
+                              Number(tx.amount) < 0 ? 'text-red-200 font-semibold' : 'text-emerald-200 font-semibold'
                             }
                           >
                             {Number(tx.amount) < 0 ? '−' : '+'}
@@ -496,13 +497,13 @@ export default function HomeScreen() {
                       </Swipeable>
                     ))
                 )}
-              </View>
+              </LinearGradient>
             </View>
           </ScrollView>
         </View>
       );
     },
-    [slideHeight, getColorForBox, handleBreakJar, getTransactionsForBox, getBalanceOverTimeForBox, deleteTransaction, handleAction, homeCurrency, convertToHome]
+    [slideHeight, getColorForBox, handleBreakJar, getTransactionsForBox, getBalanceOverTimeForBox, deleteTransaction, handleAction, homeCurrency, convertToHome, t, language]
   );
 
   return (
@@ -541,7 +542,7 @@ export default function HomeScreen() {
             <View className="mt-2" style={{ height: slideHeight }}>
               {loading && userBoxes.length === 0 ? (
                 <View className="min-h-[220px] items-center justify-center px-4">
-                  <Text className="text-white/70">Loading…</Text>
+                  <Text className="text-white/70">{t('home.loading')}</Text>
                 </View>
               ) : (
                 <FlatList
@@ -567,7 +568,7 @@ export default function HomeScreen() {
                 className="mx-4 mt-4 py-3 rounded-3xl bg-white/20 items-center"
                 activeOpacity={0.8}
               >
-                <Text className="text-white font-medium">Create your first goal</Text>
+                <Text className="text-white font-medium">{t('home.createFirstGoal')}</Text>
               </TouchableOpacity>
             )}
           </ScrollView>

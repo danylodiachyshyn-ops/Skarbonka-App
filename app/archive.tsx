@@ -12,9 +12,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Archive, RotateCcw } from 'lucide-react-native';
 import { useBoxStore } from '@/src/hooks/useBoxStore';
+import { useLanguageContext } from '@/src/contexts/LanguageContext';
 import { useJarColor, JAR_COLOR_PRESETS, JarColorPreset } from '@/src/contexts/JarColorContext';
 import { UserBox } from '@/src/lib/database.types';
 import { Transaction } from '@/src/lib/database.types';
+import { formatTransactionDate } from '@/src/lib/dateFormat';
 
 function getCurrencySymbol(code: string | null | undefined): string {
   const c = (code ?? 'EUR').toUpperCase();
@@ -25,13 +27,9 @@ function getCurrencySymbol(code: string | null | undefined): string {
   return c;
 }
 
-function formatTransactionDate(dateStr: string) {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
 export default function ArchiveScreen() {
   const router = useRouter();
+  const { t, language } = useLanguageContext();
   const { userBoxes, fetchUserBoxes, getTransactionsForBox, unarchiveUserBox, loading } = useBoxStore();
   const { getColorForBox } = useJarColor();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -44,12 +42,12 @@ export default function ArchiveScreen() {
 
   const handleRestore = (box: UserBox) => {
     Alert.alert(
-      'Restore jar',
-      `Restore "${box.name}" to active goals?`,
+      t('archive.restoreJar'),
+      t('archive.restoreConfirm', { name: box.name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Restore',
+          text: t('common.restore'),
           onPress: async () => {
             await unarchiveUserBox(box.id);
             if (archivedBoxes.length <= 1) router.back();
@@ -76,7 +74,7 @@ export default function ArchiveScreen() {
             >
               <ChevronLeft size={22} color="#fff" strokeWidth={2} />
             </TouchableOpacity>
-            <Text className="text-white text-lg font-semibold ml-3">Archive</Text>
+            <Text className="text-white text-lg font-semibold ml-3">{t('archive.title')}</Text>
           </View>
 
           <ScrollView
@@ -91,9 +89,9 @@ export default function ArchiveScreen() {
             ) : archivedBoxes.length === 0 ? (
               <View className="rounded-2xl bg-white/10 p-8 items-center">
                 <Archive size={48} color="rgba(255,255,255,0.5)" strokeWidth={2} />
-                <Text className="text-white/80 text-lg font-medium mt-4">No archived jars</Text>
+                <Text className="text-white/80 text-lg font-medium mt-4">{t('archive.noArchivedJars')}</Text>
                 <Text className="text-white/60 text-sm mt-2 text-center">
-                  Completed or archived goals will appear here.
+                  {t('archive.archivedDescription')}
                 </Text>
               </View>
             ) : (
@@ -134,11 +132,11 @@ export default function ArchiveScreen() {
 
                     {isExpanded && (
                       <View className="px-4 pb-4 pt-0 border-t border-white/20">
-                        <Text className="text-white/70 text-sm font-medium mt-3 mb-2">History</Text>
+                        <Text className="text-white/70 text-sm font-medium mt-3 mb-2">{t('archive.history')}</Text>
                         <View className="rounded-xl overflow-hidden bg-white/10">
                           {transactions.length === 0 ? (
                             <View className="p-4">
-                              <Text className="text-white/60 text-sm">No transactions</Text>
+                              <Text className="text-white/60 text-sm">{t('archive.noTransactions')}</Text>
                             </View>
                           ) : (
                             transactions.slice(0, 15).map((tx: Transaction) => (
@@ -148,10 +146,10 @@ export default function ArchiveScreen() {
                               >
                                 <View className="flex-1">
                                   <Text className="text-white font-medium" numberOfLines={1}>
-                                    {tx.note || (Number(tx.amount) < 0 ? 'Withdrawal' : 'Deposit')}
+                                    {tx.note || (Number(tx.amount) < 0 ? t('home.withdrawal') : t('home.deposit'))}
                                   </Text>
                                   <Text className="text-white/50 text-xs mt-0.5">
-                                    {formatTransactionDate(tx.date)}
+                                    {formatTransactionDate(tx.date, language)}
                                   </Text>
                                 </View>
                                 <Text
@@ -179,7 +177,7 @@ export default function ArchiveScreen() {
                           ) : (
                             <>
                               <RotateCcw size={18} color="#fff" strokeWidth={2} style={{ marginRight: 8 }} />
-                              <Text className="text-white font-semibold">Restore to active</Text>
+                              <Text className="text-white font-semibold">{t('archive.restoreToActive')}</Text>
                             </>
                           )}
                         </TouchableOpacity>

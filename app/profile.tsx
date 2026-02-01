@@ -6,19 +6,14 @@ import { useRouter } from 'expo-router';
 import { ChevronLeft, LogOut, Pencil, Globe, Lock, MessageCircle, Archive } from 'lucide-react-native';
 import { useAuthStore } from '@/src/hooks/useAuthStore';
 import { useHomeCurrency } from '@/src/hooks/useHomeCurrency';
+import { useLanguageContext } from '@/src/contexts/LanguageContext';
 import { supabase } from '@/src/lib/supabase';
 import { SUPPORTED_CURRENCIES, SupportedCurrency } from '@/src/lib/currencyApi';
 
 const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'support@skarbonka.app';
 
-const CURRENCY_LABELS: Record<SupportedCurrency, string> = {
-  EUR: '€ Euro',
-  USD: '$ US Dollar',
-  UAH: '₴ Hryvnia',
-  GBP: '£ British Pound',
-};
-
-const DISPLAY_LANGUAGE = 'English';
+const getCurrencyLabel = (code: SupportedCurrency, t: (k: string) => string) =>
+  t(`currency.${code.toLowerCase()}`);
 
 export default function ProfileScreen() {
   const { user, session, signOut, updatePassword, loading } = useAuthStore();
@@ -34,7 +29,9 @@ export default function ProfileScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
   const [showHomeCurrencyModal, setShowHomeCurrencyModal] = useState(false);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
   const { homeCurrency, setHomeCurrency } = useHomeCurrency();
+  const { language, setLanguage, t } = useLanguageContext();
 
   const isEmailProvider = (session?.user?.app_metadata?.provider as string) === 'email';
 
@@ -77,7 +74,7 @@ export default function ProfileScreen() {
       .eq('id', user.id);
     setSavingName(false);
     if (error) {
-      Alert.alert('Error', 'Could not update name.');
+      Alert.alert(t('common.error'), t('profile.couldNotUpdateName'));
       return;
     }
     setFullName(trimmed || null);
@@ -92,15 +89,15 @@ export default function ProfileScreen() {
 
   const handleChangePassword = async () => {
     if (!currentPassword.trim() || !newPassword.trim() || !confirmPassword.trim()) {
-      Alert.alert('Error', 'Fill in all password fields');
+      Alert.alert(t('common.error'), t('profile.fillAllPasswordFields'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert('Passwords do not match', 'The new password and confirmation do not match. Please enter the same password in both fields.');
+      Alert.alert(t('profile.wrongPassword'), t('profile.passwordsDoNotMatch'));
       return;
     }
     if (newPassword.length < 6) {
-      Alert.alert('Error', 'New password must be at least 6 characters');
+      Alert.alert(t('common.error'), t('profile.passwordMinLength'));
       return;
     }
     setSavingPassword(true);
@@ -110,13 +107,13 @@ export default function ProfileScreen() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      Alert.alert('Done', 'Your password has been updated.');
+      Alert.alert(t('profile.done'), t('profile.passwordUpdated'));
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to update password';
       if (message === 'Current password is incorrect') {
-        Alert.alert('Wrong password', 'The current password you entered is incorrect. Please try again.');
+        Alert.alert(t('profile.wrongPassword'), t('profile.currentPasswordIncorrect'));
       } else {
-        Alert.alert('Error', message);
+        Alert.alert(t('common.error'), message);
       }
     } finally {
       setSavingPassword(false);
@@ -131,7 +128,7 @@ export default function ProfileScreen() {
       default: `mailto:${SUPPORT_EMAIL}?subject=${subject}`,
     });
     Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open email app.');
+      Alert.alert(t('common.error'), t('profile.couldNotOpenEmail'));
     });
   };
 
@@ -153,7 +150,7 @@ export default function ProfileScreen() {
             >
               <ChevronLeft size={22} color="#fff" strokeWidth={2} />
             </TouchableOpacity>
-            <Text className="text-white text-lg font-semibold ml-3">Profile</Text>
+            <Text className="text-white text-lg font-semibold ml-3">{t('profile.title')}</Text>
           </View>
 
           {/* User info card */}
@@ -165,14 +162,14 @@ export default function ProfileScreen() {
 
               {/* Name row: display or edit */}
               <View className="mb-4">
-                <Text className="text-white/80 text-sm mb-1">Name</Text>
+                <Text className="text-white/80 text-sm mb-1">{t('profile.name')}</Text>
                 {loadingProfile ? (
                   <ActivityIndicator size="small" color="rgba(255,255,255,0.8)" />
                 ) : isEditingName ? (
                   <View className="flex-row items-center gap-2 mt-1">
                     <TextInput
                       className="flex-1 bg-white/20 rounded-xl px-4 py-3 text-white text-base"
-                      placeholder="Your name"
+                      placeholder={t('profile.yourName')}
                       placeholderTextColor="rgba(255,255,255,0.5)"
                       value={editNameValue}
                       onChangeText={setEditNameValue}
@@ -188,7 +185,7 @@ export default function ProfileScreen() {
                       {savingName ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
-                        <Text className="text-white font-semibold">Save</Text>
+                        <Text className="text-white font-semibold">{t('common.save')}</Text>
                       )}
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -197,7 +194,7 @@ export default function ProfileScreen() {
                       className="rounded-xl py-3 px-4 bg-white/20"
                       activeOpacity={0.8}
                     >
-                      <Text className="text-white font-medium">Cancel</Text>
+                      <Text className="text-white font-medium">{t('common.cancel')}</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -207,28 +204,29 @@ export default function ProfileScreen() {
                     activeOpacity={0.8}
                   >
                     <Text className="text-white text-base font-medium" numberOfLines={1}>
-                      {fullName?.trim() || 'Add your name'}
+                      {fullName?.trim() || t('profile.addYourName')}
                     </Text>
                     <Pencil size={18} color="rgba(255,255,255,0.8)" strokeWidth={2} />
                   </TouchableOpacity>
                 )}
               </View>
 
-              <Text className="text-white/80 text-sm text-center mb-1">Email</Text>
+              <Text className="text-white/80 text-sm text-center mb-1">{t('auth.email')}</Text>
               <Text className="text-white text-base font-medium text-center mb-6" numberOfLines={1}>
                 {displayEmail}
               </Text>
 
-              {/* Language (no functionality yet) */}
+              {/* Language */}
               <TouchableOpacity
+                onPress={() => setShowLanguageModal(true)}
                 className="flex-row items-center justify-between rounded-xl py-3.5 px-4 bg-white/10 mb-4"
                 activeOpacity={0.7}
               >
                 <View className="flex-row items-center">
                   <Globe size={20} color="rgba(255,255,255,0.9)" strokeWidth={2} style={{ marginRight: 12 }} />
-                  <Text className="text-white font-medium">Language</Text>
+                  <Text className="text-white font-medium">{t('profile.language')}</Text>
                 </View>
-                <Text className="text-white/80 text-base">{DISPLAY_LANGUAGE}</Text>
+                <Text className="text-white/80 text-base">{t(`languages.${language}`)}</Text>
               </TouchableOpacity>
 
               {/* Home currency (for conversion on jar cards) */}
@@ -238,10 +236,10 @@ export default function ProfileScreen() {
                 activeOpacity={0.7}
               >
                 <View className="flex-row items-center">
-                  <Text className="text-white font-medium">Home currency</Text>
+                  <Text className="text-white font-medium">{t('profile.homeCurrency')}</Text>
                 </View>
                 <Text className="text-white/80 text-base">
-                  {homeCurrency ? CURRENCY_LABELS[homeCurrency] : 'None'}
+                  {homeCurrency ? getCurrencyLabel(homeCurrency, t) : t('common.none')}
                 </Text>
               </TouchableOpacity>
 
@@ -254,7 +252,7 @@ export default function ProfileScreen() {
                 >
                   <View className="flex-row items-center">
                     <Lock size={20} color="rgba(255,255,255,0.9)" strokeWidth={2} style={{ marginRight: 12 }} />
-                    <Text className="text-white font-medium">Change password</Text>
+                    <Text className="text-white font-medium">{t('profile.changePassword')}</Text>
                   </View>
                 </TouchableOpacity>
               )}
@@ -267,7 +265,7 @@ export default function ProfileScreen() {
               >
                 <View className="flex-row items-center">
                   <MessageCircle size={20} color="rgba(255,255,255,0.9)" strokeWidth={2} style={{ marginRight: 12 }} />
-                  <Text className="text-white font-medium">Support</Text>
+                  <Text className="text-white font-medium">{t('profile.support')}</Text>
                 </View>
               </TouchableOpacity>
 
@@ -279,7 +277,7 @@ export default function ProfileScreen() {
               >
                 <View className="flex-row items-center">
                   <Archive size={20} color="rgba(255,255,255,0.9)" strokeWidth={2} style={{ marginRight: 12 }} />
-                  <Text className="text-white font-medium">Archive</Text>
+                  <Text className="text-white font-medium">{t('profile.archive')}</Text>
                 </View>
               </TouchableOpacity>
 
@@ -294,7 +292,7 @@ export default function ProfileScreen() {
                 ) : (
                   <>
                     <LogOut size={20} color="#fff" strokeWidth={2} style={{ marginRight: 8 }} />
-                    <Text className="text-white font-semibold">Log out</Text>
+                    <Text className="text-white font-semibold">{t('profile.logOut')}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -307,9 +305,9 @@ export default function ProfileScreen() {
       <Modal visible={showHomeCurrencyModal} transparent animationType="fade">
         <View className="flex-1 bg-black/50 justify-center px-6">
           <View className="bg-white rounded-3xl p-6">
-            <Text className="text-slate-800 text-xl font-bold mb-2">Home currency</Text>
+            <Text className="text-slate-800 text-xl font-bold mb-2">{t('profile.homeCurrencyModalTitle')}</Text>
             <Text className="text-slate-500 text-sm mb-4">
-              Jar balances will be shown in this currency when different.
+              {t('profile.homeCurrencyModalDesc')}
             </Text>
             <TouchableOpacity
               onPress={() => {
@@ -319,7 +317,7 @@ export default function ProfileScreen() {
               className="rounded-xl py-3.5 px-4 bg-slate-100 mb-2"
               activeOpacity={0.8}
             >
-              <Text className="text-slate-700 font-medium">None</Text>
+              <Text className="text-slate-700 font-medium">{t('common.none')}</Text>
             </TouchableOpacity>
             {SUPPORTED_CURRENCIES.map((code) => (
               <TouchableOpacity
@@ -331,7 +329,7 @@ export default function ProfileScreen() {
                 className="rounded-xl py-3.5 px-4 bg-slate-100 mb-2"
                 activeOpacity={0.8}
               >
-                <Text className="text-slate-800 font-medium">{CURRENCY_LABELS[code]}</Text>
+                <Text className="text-slate-800 font-medium">{getCurrencyLabel(code, t)}</Text>
               </TouchableOpacity>
             ))}
             <TouchableOpacity
@@ -339,7 +337,36 @@ export default function ProfileScreen() {
               className="rounded-xl py-3.5 mt-2 bg-slate-200 items-center"
               activeOpacity={0.8}
             >
-              <Text className="text-slate-700 font-semibold">Close</Text>
+              <Text className="text-slate-700 font-semibold">{t('common.close')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Language modal */}
+      <Modal visible={showLanguageModal} transparent animationType="fade">
+        <View className="flex-1 bg-black/50 justify-center px-6">
+          <View className="bg-white rounded-3xl p-6">
+            <Text className="text-slate-800 text-xl font-bold mb-2">{t('profile.language')}</Text>
+            {(['en', 'de', 'uk'] as const).map((code) => (
+              <TouchableOpacity
+                key={code}
+                onPress={() => {
+                  setLanguage(code);
+                  setShowLanguageModal(false);
+                }}
+                className="rounded-xl py-3.5 px-4 bg-slate-100 mb-2"
+                activeOpacity={0.8}
+              >
+                <Text className="text-slate-800 font-medium">{t(`languages.${code}`)}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              onPress={() => setShowLanguageModal(false)}
+              className="rounded-xl py-3.5 mt-2 bg-slate-200 items-center"
+              activeOpacity={0.8}
+            >
+              <Text className="text-slate-700 font-semibold">{t('common.close')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -349,23 +376,23 @@ export default function ProfileScreen() {
       <Modal visible={showChangePassword} transparent animationType="fade">
         <View className="flex-1 bg-black/50 justify-center px-6">
           <View className="bg-white rounded-3xl p-6">
-            <Text className="text-slate-800 text-xl font-bold mb-1">Change password</Text>
+            <Text className="text-slate-800 text-xl font-bold mb-1">{t('profile.changePasswordTitle')}</Text>
             <Text className="text-slate-600 text-sm font-medium mb-1.5">
-              Current password
+              {t('profile.currentPassword')}
             </Text>
             <TextInput
               className="border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-base mb-4"
-              placeholder="Enter current password"
+              placeholder={t('profile.enterCurrentPassword')}
               placeholderTextColor="#94a3b8"
               value={currentPassword}
               onChangeText={setCurrentPassword}
               secureTextEntry
               editable={!savingPassword}
             />
-            <Text className="text-slate-600 text-sm font-medium mb-1.5">New password</Text>
+            <Text className="text-slate-600 text-sm font-medium mb-1.5">{t('profile.newPassword')}</Text>
             <TextInput
               className="border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-base mb-3"
-              placeholder="Enter new password"
+              placeholder={t('profile.enterNewPassword')}
               placeholderTextColor="#94a3b8"
               value={newPassword}
               onChangeText={setNewPassword}
@@ -373,11 +400,11 @@ export default function ProfileScreen() {
               editable={!savingPassword}
             />
             <Text className="text-slate-600 text-sm font-medium mb-1.5">
-              Confirm new password
+              {t('profile.confirmPassword')}
             </Text>
             <TextInput
               className="border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-base mb-4"
-              placeholder="Enter new password again"
+              placeholder={t('profile.enterNewPasswordAgain')}
               placeholderTextColor="#94a3b8"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
@@ -396,7 +423,7 @@ export default function ProfileScreen() {
                 className="flex-1 rounded-xl py-3.5 bg-slate-100 items-center"
                 activeOpacity={0.8}
               >
-                <Text className="text-slate-700 font-semibold">Cancel</Text>
+                <Text className="text-slate-700 font-semibold">{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleChangePassword}
@@ -408,7 +435,7 @@ export default function ProfileScreen() {
                 {savingPassword ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text className="text-white font-semibold">Update</Text>
+                  <Text className="text-white font-semibold">{t('common.update')}</Text>
                 )}
               </TouchableOpacity>
             </View>

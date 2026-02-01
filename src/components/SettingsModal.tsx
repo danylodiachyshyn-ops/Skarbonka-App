@@ -2,16 +2,10 @@ import { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Trash2, Archive } from 'lucide-react-native';
+import { useLanguageContext } from '@/src/contexts/LanguageContext';
 import { useJarColor, JAR_COLOR_PRESETS, JarColorPreset } from '@/src/contexts/JarColorContext';
 import { useBoxStore } from '@/src/hooks/useBoxStore';
 import { UserBox } from '@/src/lib/database.types';
-
-const CURRENCY_OPTIONS: { code: string; label: string }[] = [
-  { code: 'EUR', label: '€ Euro' },
-  { code: 'USD', label: '$ US Dollar' },
-  { code: 'UAH', label: '₴ Hryvnia' },
-  { code: 'GBP', label: '£ British Pound' },
-];
 
 interface SettingsModalProps {
   visible: boolean;
@@ -19,11 +13,11 @@ interface SettingsModalProps {
   currentBox: UserBox | null;
 }
 
-const PRESET_LABELS: Record<JarColorPreset, string> = {
-  emerald: 'Emerald',
-  ocean: 'Ocean Blue',
-  sunset: 'Sunset Orange',
-  slate: 'Slate',
+const PRESET_LABEL_KEYS: Record<JarColorPreset, string> = {
+  emerald: 'settings.presetEmerald',
+  ocean: 'settings.presetOcean',
+  sunset: 'settings.presetSunset',
+  slate: 'settings.presetSlate',
 };
 
 export default function SettingsModal({
@@ -32,15 +26,15 @@ export default function SettingsModal({
   currentBox,
 }: SettingsModalProps) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguageContext();
   const { getColorForBox, setColorForBox, removeColorForBox } = useJarColor();
-  const { updateBoxName, updateBoxTargetAmount, updateBoxCurrencyWithConversion, archiveUserBox, deleteUserBox, loading } = useBoxStore();
+  const { updateBoxName, updateBoxTargetAmount, archiveUserBox, deleteUserBox, loading } = useBoxStore();
   const [editedName, setEditedName] = useState(currentBox?.name ?? '');
   const [editedTarget, setEditedTarget] = useState(
     currentBox?.target_amount != null && Number(currentBox.target_amount) > 0
       ? String(Number(currentBox.target_amount))
       : ''
   );
-  const [editedCurrency, setEditedCurrency] = useState(currentBox?.currency ?? 'EUR');
   const [nameError, setNameError] = useState<string | null>(null);
   const [targetError, setTargetError] = useState<string | null>(null);
 
@@ -52,11 +46,10 @@ export default function SettingsModal({
           ? String(Number(currentBox.target_amount))
           : ''
       );
-      setEditedCurrency(currentBox.currency ?? 'EUR');
       setNameError(null);
       setTargetError(null);
     }
-  }, [visible, currentBox?.id, currentBox?.name, currentBox?.target_amount, currentBox?.currency]);
+  }, [visible, currentBox?.id, currentBox?.name, currentBox?.target_amount]);
 
   if (!visible) return null;
 
@@ -66,14 +59,14 @@ export default function SettingsModal({
     if (!currentBox) return;
     const trimmed = editedName.trim();
     if (!trimmed) {
-      setNameError('Name cannot be empty');
+      setNameError(t('settings.nameCannotBeEmpty'));
       return;
     }
     setNameError(null);
     try {
       await updateBoxName(currentBox.id, trimmed);
     } catch {
-      setNameError('Failed to update name');
+      setNameError(t('settings.failedToUpdateName'));
     }
   };
 
@@ -85,37 +78,37 @@ export default function SettingsModal({
       try {
         await updateBoxTargetAmount(currentBox.id, null);
       } catch {
-        setTargetError('Failed to update');
+        setTargetError(t('settings.failedToUpdate'));
       }
       return;
     }
     const value = parseFloat(raw);
     if (isNaN(value) || value < 0) {
-      setTargetError('Enter a valid amount');
+      setTargetError(t('settings.enterValidAmount'));
       return;
     }
     try {
       await updateBoxTargetAmount(currentBox.id, value);
     } catch {
-      setTargetError('Failed to update target');
+      setTargetError(t('settings.failedToUpdateTarget'));
     }
   };
 
   const handleArchivePiggyBank = () => {
     if (!currentBox) return;
     Alert.alert(
-      'Archive goal',
-      'Move this jar to Archive? You can restore it later from Profile → Archive.',
+      t('settings.archiveGoal'),
+      t('settings.archiveGoalConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Archive',
+          text: t('settings.archiveButton'),
           onPress: async () => {
             try {
               await archiveUserBox(currentBox.id);
               onClose();
             } catch {
-              setNameError('Failed to archive');
+              setNameError(t('settings.failedToArchive'));
             }
           },
         },
@@ -126,12 +119,12 @@ export default function SettingsModal({
   const handleDeletePiggyBank = () => {
     if (!currentBox) return;
     Alert.alert(
-      'Delete piggy bank',
-      'Are you sure you want to delete this piggy bank? All transactions and saved amount will be permanently removed. This cannot be undone.',
+      t('settings.deletePiggyBank'),
+      t('settings.deletePiggyBankConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -139,7 +132,7 @@ export default function SettingsModal({
               await removeColorForBox(currentBox.id);
               onClose();
             } catch {
-              setNameError('Failed to delete piggy bank');
+              setNameError(t('settings.failedToDelete'));
             }
           },
         },
@@ -168,7 +161,7 @@ export default function SettingsModal({
                 className="flex-row justify-between items-center px-5 pb-2"
                 style={{ paddingTop: Math.max(insets.top, 16) }}
               >
-                <Text className="text-slate-800 text-2xl font-bold">Settings</Text>
+                <Text className="text-slate-800 text-2xl font-bold">{t('settings.title')}</Text>
                 <TouchableOpacity
                   onPress={onClose}
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -182,7 +175,7 @@ export default function SettingsModal({
               {currentBox ? (
                 <>
                   <View className="mb-4">
-                  <Text className="text-slate-500 text-sm mb-2">Piggy bank name</Text>
+                  <Text className="text-slate-500 text-sm mb-2">{t('settings.piggyBankName')}</Text>
                   <View className="flex-row items-center gap-2 mb-1">
                     <TextInput
                       value={editedName}
@@ -190,7 +183,7 @@ export default function SettingsModal({
                         setEditedName(t);
                         if (nameError) setNameError(null);
                       }}
-                      placeholder="Enter name"
+                      placeholder={t('settings.enterName')}
                       placeholderTextColor="#94a3b8"
                       className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-base"
                       editable={!loading}
@@ -204,7 +197,7 @@ export default function SettingsModal({
                       {loading ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
-                        <Text className="text-white font-semibold">Save</Text>
+                        <Text className="text-white font-semibold">{t('common.save')}</Text>
                       )}
                     </TouchableOpacity>
                   </View>
@@ -214,7 +207,7 @@ export default function SettingsModal({
                   </View>
 
                   <View className="mb-4">
-                  <Text className="text-slate-500 text-sm mb-2">Target amount</Text>
+                  <Text className="text-slate-500 text-sm mb-2">{t('settings.targetAmount')}</Text>
                   <View className="flex-row items-center gap-2 mb-1">
                     <TextInput
                       value={editedTarget}
@@ -222,7 +215,7 @@ export default function SettingsModal({
                         setEditedTarget(t);
                         if (targetError) setTargetError(null);
                       }}
-                      placeholder="0 (leave empty for no goal)"
+                      placeholder={t('settings.leaveEmptyForNoGoal')}
                       placeholderTextColor="#94a3b8"
                       className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-base"
                       keyboardType="numeric"
@@ -239,7 +232,11 @@ export default function SettingsModal({
                       }
                       className="rounded-xl bg-slate-800 px-4 py-3 min-w-[72px] items-center"
                     >
-                      <Text className="text-white font-semibold">Save</Text>
+                      {loading ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text className="text-white font-semibold">{t('common.save')}</Text>
+                      )}
                     </TouchableOpacity>
                   </View>
                   {targetError ? (
@@ -248,43 +245,7 @@ export default function SettingsModal({
                   </View>
 
                   <View className="mb-4">
-                  <Text className="text-slate-500 text-sm mb-2">Currency</Text>
-                  <View className="flex-row flex-wrap gap-3">
-                    {CURRENCY_OPTIONS.map(({ code, label }) => {
-                      const isSelected = editedCurrency === code;
-                      return (
-                        <TouchableOpacity
-                          key={code}
-                          onPress={async () => {
-                            setEditedCurrency(code);
-                            if (currentBox && code !== (currentBox?.currency ?? 'EUR')) {
-                              try {
-                                await updateBoxCurrencyWithConversion(currentBox.id, code);
-                              } catch (e: any) {
-                                setTargetError(e?.message ?? 'Failed to convert currency');
-                              }
-                            }
-                          }}
-                          className="rounded-2xl overflow-hidden"
-                          style={{
-                            width: '47%',
-                            borderWidth: isSelected ? 3 : 0,
-                            borderColor: '#1e40af',
-                          }}
-                          activeOpacity={0.8}
-                          disabled={loading}
-                        >
-                          <View className="h-12 rounded-2xl items-center justify-center bg-slate-100 flex-row gap-2">
-                            <Text className="text-slate-800 font-semibold">{label}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                  </View>
-
-                  <View className="mb-4">
-                  <Text className="text-slate-500 text-sm mb-2">Jar color</Text>
+                  <Text className="text-slate-500 text-sm mb-2">{t('settings.jarColor')}</Text>
                 <View className="flex-row flex-wrap gap-3">
                   {(Object.keys(JAR_COLOR_PRESETS) as JarColorPreset[]).map((preset) => {
                     const isSelected = currentPreset === preset;
@@ -293,20 +254,19 @@ export default function SettingsModal({
                       <TouchableOpacity
                         key={preset}
                         onPress={() => setColorForBox(currentBox.id, preset)}
-                        className="rounded-3xl overflow-hidden"
-                        style={{
-                          width: '47%',
-                          borderWidth: isSelected ? 3 : 0,
-                          borderColor: colors.button,
-                        }}
-                        activeOpacity={0.8}
+                        activeOpacity={0.85}
+                        style={{ width: '47%' }}
                       >
                         <View
-                          className="h-14 rounded-3xl items-center justify-center"
-                          style={{ backgroundColor: colors.button }}
+                          className="h-14 rounded-2xl items-center justify-center"
+                          style={{
+                            backgroundColor: colors.button,
+                            borderWidth: isSelected ? 2 : 0,
+                            borderColor: 'rgba(0,0,0,0.25)',
+                          }}
                         >
                           <Text className="text-white font-semibold">
-                            {PRESET_LABELS[preset]}
+                            {t(PRESET_LABEL_KEYS[preset])}
                           </Text>
                         </View>
                       </TouchableOpacity>
@@ -322,7 +282,7 @@ export default function SettingsModal({
                   activeOpacity={0.8}
                 >
                   <Archive size={20} color="#475569" strokeWidth={2} style={{ marginRight: 8 }} />
-                  <Text className="text-slate-700 font-semibold">Archive goal</Text>
+                  <Text className="text-slate-700 font-semibold">{t('settings.archiveGoal')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -332,12 +292,12 @@ export default function SettingsModal({
                   activeOpacity={0.8}
                 >
                   <Trash2 size={20} color="#dc2626" strokeWidth={2} style={{ marginRight: 8 }} />
-                  <Text className="text-red-600 font-semibold">Delete piggy bank</Text>
+                  <Text className="text-red-600 font-semibold">{t('settings.deletePiggyBank')}</Text>
                 </TouchableOpacity>
               </>
             ) : (
               <View className="py-4">
-                <Text className="text-slate-500">Select a jar to change its settings.</Text>
+                <Text className="text-slate-500">{t('settings.selectJarToChange')}</Text>
               </View>
             )}
               </ScrollView>

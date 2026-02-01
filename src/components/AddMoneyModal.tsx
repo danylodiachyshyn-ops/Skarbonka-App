@@ -15,6 +15,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PANEL_HEIGHT = Math.min(SCREEN_HEIGHT * 0.82, 640);
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
+import { useLanguageContext } from '@/src/contexts/LanguageContext';
 import { useBoxStore } from '@/src/hooks/useBoxStore';
 import { UserBox } from '@/src/lib/database.types';
 
@@ -46,20 +47,21 @@ export default function AddMoneyModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const insets = useSafeAreaInsets();
   const { addTransaction, withdrawFromBox } = useBoxStore();
+  const { t } = useLanguageContext();
 
   const handleSubmit = async () => {
     if (!userBox) return;
 
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
+      Alert.alert(t('common.error'), t('addMoney.pleaseEnterValidAmount'));
       return;
     }
 
     if (mode === 'withdraw') {
       const balance = Number(userBox.current_amount);
       if (numAmount > balance) {
-        Alert.alert('Error', `Not enough balance. Available: ${balance.toFixed(2)}`);
+        Alert.alert(t('common.error'), t('addMoney.notEnoughBalance', { amount: balance.toFixed(2) }));
         return;
       }
     }
@@ -75,7 +77,7 @@ export default function AddMoneyModal({
       setNote('');
       onClose();
     } catch (error: unknown) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to save');
+      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('addMoney.failedToSave'));
     } finally {
       setIsSubmitting(false);
     }
@@ -136,7 +138,7 @@ export default function AddMoneyModal({
                     style={{ backgroundColor: mode === 'add' ? '#fff' : 'transparent' }}
                     activeOpacity={0.8}
                   >
-                    <Text className={mode === 'add' ? 'text-slate-800 font-semibold' : 'text-slate-500'}>Add</Text>
+                    <Text className={mode === 'add' ? 'text-slate-800 font-semibold' : 'text-slate-500'}>{t('addMoney.add')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => setMode('withdraw')}
@@ -144,7 +146,7 @@ export default function AddMoneyModal({
                     style={{ backgroundColor: mode === 'withdraw' ? '#fff' : 'transparent' }}
                     activeOpacity={0.8}
                   >
-                    <Text className={mode === 'withdraw' ? 'text-slate-800 font-semibold' : 'text-slate-500'}>Withdraw</Text>
+                    <Text className={mode === 'withdraw' ? 'text-slate-800 font-semibold' : 'text-slate-500'}>{t('addMoney.withdraw')}</Text>
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity
@@ -160,20 +162,20 @@ export default function AddMoneyModal({
               <View style={{ flex: 1 }}>
               {!userBox ? (
                 <View className="flex-1 items-center justify-center px-5">
-                  <Text className="text-slate-500 text-center">Select a jar to add money.</Text>
+                  <Text className="text-slate-500 text-center">{t('addMoney.selectJarToAdd')}</Text>
                 </View>
               ) : (
                 <>
                   {mode === 'withdraw' && (
                     <View className="px-5 mb-2">
-                      <Text className="text-slate-500 text-sm">Available</Text>
+                      <Text className="text-slate-500 text-sm">{t('addMoney.available')}</Text>
                       <Text className="text-slate-800 text-lg font-semibold">
                         {formatCurrency(String(Number(userBox.current_amount)))}
                       </Text>
                     </View>
                   )}
                   <View className="px-5 mb-4">
-                    <Text className="text-slate-500 text-sm mb-2">Amount</Text>
+                    <Text className="text-slate-500 text-sm mb-2">{t('addMoney.amount')}</Text>
                     <View className="bg-white rounded-3xl p-6 items-center shadow-sm">
                       <Text className="text-slate-800 text-4xl font-bold">
                         {mode === 'withdraw' && amount ? `−${formatCurrency(amount)}` : formatCurrency(amount)}
@@ -182,10 +184,10 @@ export default function AddMoneyModal({
                   </View>
 
                   <View className="px-5 mb-4">
-                    <Text className="text-slate-500 text-sm mb-2">Note (optional)</Text>
+                    <Text className="text-slate-500 text-sm mb-2">{t('addMoney.noteOptional')}</Text>
                     <TextInput
                       className="bg-white rounded-2xl px-4 py-3 text-slate-800 text-base shadow-sm"
-                      placeholder="Add a note…"
+                      placeholder={t('addMoney.addNote')}
                       placeholderTextColor="#94a3b8"
                       value={note}
                       onChangeText={setNote}
@@ -230,7 +232,7 @@ export default function AddMoneyModal({
                       disabled={!amount || parseFloat(amount) <= 0 || isSubmitting || (mode === 'withdraw' && parseFloat(amount) > Number(userBox.current_amount))}
                     >
                       <Text className="text-white text-lg font-bold">
-                        {isSubmitting ? (mode === 'add' ? 'Adding…' : 'Withdrawing…') : mode === 'add' ? 'Add Money' : 'Withdraw'}
+                        {isSubmitting ? (mode === 'add' ? t('addMoney.adding') : t('addMoney.withdrawing')) : mode === 'add' ? t('addMoney.addMoney') : t('addMoney.withdrawButton')}
                       </Text>
                     </TouchableOpacity>
                   </View>

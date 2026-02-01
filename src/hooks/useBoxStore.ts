@@ -11,7 +11,6 @@ import {
   setCachedTransactions,
   isLikelyNetworkError,
 } from '@/src/lib/offlineQueue';
-import { getRates } from '@/src/lib/currencyApi';
 import { useAuthStore } from './useAuthStore';
 
 // Type for UserBox with joined template data
@@ -53,8 +52,6 @@ interface BoxStore {
   deleteUserBox: (boxId: string) => Promise<void>;
   updateBoxName: (boxId: string, name: string) => Promise<void>;
   updateBoxTargetAmount: (boxId: string, targetAmount: number | null) => Promise<void>;
-  updateBoxCurrency: (boxId: string, currency: string) => Promise<void>;
-  updateBoxCurrencyWithConversion: (boxId: string, newCurrency: string) => Promise<void>;
   deleteTransaction: (transactionId: string) => Promise<void>;
   
   // Legacy sync methods (kept for backward compatibility)
@@ -712,73 +709,6 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
       }));
     } catch (err: any) {
       set({ error: err?.message ?? 'Failed to update target', loading: false });
-      throw err;
-    }
-    set({ loading: false });
-  },
-
-  updateBoxCurrency: async (boxId: string, currency: string) => {
-    const code = (currency?.trim() || 'EUR').toUpperCase();
-    set({ loading: true, error: null });
-    try {
-      const { error } = await supabase
-        .from('user_boxes')
-        .update({ currency: code, updated_at: new Date().toISOString() } as never)
-        .eq('id', boxId);
-      if (error) throw error;
-      set((state) => ({
-        userBoxes: state.userBoxes.map((b) =>
-          b.id === boxId ? { ...b, currency: code, updated_at: new Date().toISOString() } : b
-        ),
-      }));
-    } catch (err: any) {
-      set({ error: err?.message ?? 'Failed to update currency', loading: false });
-      throw err;
-    }
-    set({ loading: false });
-  },
-
-  updateBoxCurrencyWithConversion: async (boxId: string, newCurrency: string) => {
-    const toCode = (newCurrency?.trim() || 'EUR').toUpperCase();
-    set({ loading: true, error: null });
-    try {
-      const state = get();
-      const box = state.userBoxes.find((b) => b.id === boxId);
-      if (!box) throw new Error('Box not found');
-      const fromCode = (box.currency ?? 'EUR').toUpperCase();
-      const currentAmount = Number(box.current_amount);
-
-      if (fromCode === toCode) {
-        set({ loading: false });
-        return;
-      }
-
-      const rates = await getRates(fromCode);
-      const rateToNew = rates[toCode];
-      if (rateToNew == null || rateToNew <= 0) {
-        throw new Error('Conversion not available for this currency. Check your connection.');
-      }
-      const convertedAmount = Math.round(currentAmount * rateToNew * 100) / 100;
-
-      const { error } = await supabase
-        .from('user_boxes')
-        .update({
-          currency: toCode,
-          current_amount: convertedAmount,
-          updated_at: new Date().toISOString(),
-        } as never)
-        .eq('id', boxId);
-
-      if (error) throw error;
-      set((s) => ({
-        userBoxes: s.userBoxes.map((b) =>
-          b.id === boxId
-            ? { ...b, currency: toCode, current_amount: convertedAmount, updated_at: new Date().toISOString() }
-            : b
-        ),
-      }));
-    } catch (err: any) {
-      set({ error: err?.message ?? 'Failed to update currency', loading: false });
       throw err;
     }
     set({ loading: false });

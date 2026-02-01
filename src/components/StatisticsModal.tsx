@@ -3,6 +3,7 @@ import { View, Text, Modal, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Line, G } from 'react-native-svg';
 import { X } from 'lucide-react-native';
+import { useLanguageContext } from '@/src/contexts/LanguageContext';
 import { useJarColor, JAR_COLOR_PRESETS } from '@/src/contexts/JarColorContext';
 import { useBoxStore } from '@/src/hooks/useBoxStore';
 import { UserBox } from '@/src/lib/database.types';
@@ -69,6 +70,7 @@ export default function StatisticsModal({
   onClose,
   currentBox,
 }: StatisticsModalProps) {
+  const { t } = useLanguageContext();
   const { getColorForBox } = useJarColor();
   const { getBalanceOverTimeForBox } = useBoxStore();
   const [period, setPeriod] = useState<Period>('week');
@@ -105,7 +107,7 @@ export default function StatisticsModal({
         <View className="bg-white rounded-t-3xl pt-6 pb-8 px-6">
           <SafeAreaView edges={['top']}>
             <View className="flex-row justify-between items-center mb-4">
-              <Text className="text-slate-800 text-2xl font-bold">Statistics</Text>
+              <Text className="text-slate-800 text-2xl font-bold">{t('statistics.title')}</Text>
               <TouchableOpacity
                 onPress={onClose}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -138,7 +140,7 @@ export default function StatisticsModal({
                         className="text-center font-semibold text-sm"
                         style={{ color: period === p ? '#0f172a' : '#64748b' }}
                       >
-                        {p === 'week' ? 'Week' : p === 'month' ? 'Month' : 'All time'}
+                        {p === 'week' ? t('statistics.week') : p === 'month' ? t('statistics.month') : t('statistics.allTime')}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -148,15 +150,15 @@ export default function StatisticsModal({
                   {chartData.length === 0 ? (
                     <View style={{ height: CHART_HEIGHT + 32 }} className="items-center justify-center px-4">
                       <Text className="text-slate-500 text-center">
-                        No activity in this period.{'\n'}Add money to see progress.
+                        {t('statistics.noActivityInPeriod')}{'\n'}{t('statistics.addMoneyToSeeProgress')}
                       </Text>
                     </View>
                   ) : (
                     <>
                       <View className="px-2 pt-2">
                         <Text className="text-slate-500 text-xs">
-                          Balance ({currencySym}) — 0 to {maxBalance}{currencySym}
-                          {hasTarget && targetAmount != null ? ` (goal: ${targetAmount}${currencySym})` : ''}
+                          {t('statistics.balance')} ({currencySym}) — {t('statistics.to')} {maxBalance}{currencySym}
+                          {hasTarget && targetAmount != null ? ` (${t('statistics.goal')}: ${targetAmount}${currencySym})` : ''}
                         </Text>
                       </View>
                       <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
@@ -228,16 +230,16 @@ export default function StatisticsModal({
 
                 {chartData.length > 0 && (
                   <View className="mt-3 flex-row justify-between">
-                    <Text className="text-slate-500 text-sm">Start</Text>
+                    <Text className="text-slate-500 text-sm">{t('statistics.start')}</Text>
                     <Text className="text-slate-800 font-semibold">
-                      Current: {Number(currentBox.current_amount).toFixed(2)} {currencySym}
+                      {t('statistics.current')}: {Number(currentBox.current_amount).toFixed(2)} {currencySym}
                     </Text>
                   </View>
                 )}
               </>
             ) : (
               <View style={{ minHeight: 180 }} className="items-center justify-center">
-                <Text className="text-slate-500">Select a piggy bank to view statistics.</Text>
+                <Text className="text-slate-500">{t('statistics.selectPiggyBankForStats')}</Text>
               </View>
             )}
           </SafeAreaView>
