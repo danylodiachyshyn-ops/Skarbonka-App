@@ -17,6 +17,7 @@ CREATE TABLE public.profiles (
 
 -- Вмикаємо захист (RLS)
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles FORCE ROW LEVEL SECURITY;
 
 -- Політики доступу (Кожен бачить тільки себе)
 CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
@@ -41,6 +42,7 @@ CREATE TABLE public.box_templates (
 
 -- RLS: Шаблони доступні для читання всім (публічний каталог)
 ALTER TABLE box_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE box_templates FORCE ROW LEVEL SECURITY;
 CREATE POLICY "Public read templates" ON box_templates FOR SELECT USING (true);
 
 -- ============================================
@@ -55,7 +57,7 @@ CREATE TABLE public.user_boxes (
   
   name TEXT NOT NULL, -- Юзер може перейменувати ("На мрію")
   currency TEXT DEFAULT 'EUR', -- Валюта скарбнички (EUR, USD, UAH, GBP тощо)
-  current_amount DECIMAL(12, 2) DEFAULT 0,
+  current_amount DECIMAL(12, 2) DEFAULT 0 CHECK (current_amount >= 0),
   target_amount DECIMAL(12, 2), -- Цільова сума (з Create Goal або з шаблону)
   is_archived BOOLEAN DEFAULT FALSE,
   
@@ -69,6 +71,7 @@ CREATE TABLE public.user_boxes (
 
 -- RLS: Юзер бачить тільки свої коробки
 ALTER TABLE user_boxes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_boxes FORCE ROW LEVEL SECURITY;
 CREATE POLICY "Users view own boxes" ON user_boxes FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users insert own boxes" ON user_boxes FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users update own boxes" ON user_boxes FOR UPDATE USING (auth.uid() = user_id);
@@ -91,8 +94,14 @@ CREATE TABLE public.transactions (
   date TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
 
+-- Invariants: amount cannot be 0.
+-- We intentionally drop + re-add the constraint so the script stays re-runnable.
+ALTER TABLE public.transactions DROP CONSTRAINT IF EXISTS transactions_amount_check;
+ALTER TABLE public.transactions ADD CONSTRAINT transactions_amount_check CHECK (amount != 0);
+
 -- RLS: Юзер бачить транзакції тільки своїх коробок
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions FORCE ROW LEVEL SECURITY;
 CREATE POLICY "Users view own transactions" ON transactions FOR SELECT 
 USING (EXISTS (SELECT 1 FROM user_boxes WHERE user_boxes.id = transactions.box_id AND user_boxes.user_id = auth.uid()));
 
@@ -139,6 +148,23 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER on_transaction_added
   AFTER INSERT ON transactions
   FOR EACH ROW EXECUTE FUNCTION update_box_amount();
+
+-- Keep user_boxes.current_amount in sync when a transaction is deleted.
+-- Withdrawals are stored as negative `transactions.amount`, so we subtract OLD.amount.
+CREATE OR REPLACE FUNCTION public.update_box_amount_on_transaction_deleted()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE user_boxes
+  SET current_amount = current_amount - OLD.amount,
+      updated_at = TIMEZONE('utc', NOW())
+  WHERE id = OLD.box_id;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER on_transaction_deleted
+  AFTER DELETE ON transactions
+  FOR EACH ROW EXECUTE FUNCTION update_box_amount_on_transaction_deleted();
 
 
 -- ============================================

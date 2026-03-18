@@ -92,36 +92,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
 
     if (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7486/ingest/234a9c32-f928-49a1-9752-227f085fcbe7', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '85dad0',
-        },
-        body: JSON.stringify({
-          sessionId: '85dad0',
-          runId: 'signup-debug',
-          hypothesisId: 'H2',
-          location: 'src/hooks/useAuthStore.ts:signUp:error',
-          message: 'Supabase signUp returned error',
-          data: {
-            errorMessage: error.message,
-            // Don't log raw tokens; these are safe request metadata if available.
-            status: (error as any).status,
-            code: (error as any).code,
-            name: (error as any).name,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      console.warn('[SupabaseSignUpDebug]', {
-        errorMessage: error.message,
-        status: (error as any).status,
-        code: (error as any).code,
-        name: (error as any).name,
-      });
       set({ loading: false, error: error.message });
       return;
     }

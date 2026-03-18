@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserBox } from './database.types';
 import { Transaction } from './database.types';
+import { decryptJson, encryptJson } from './secureCrypto';
 
 const OFFLINE_QUEUE_KEY = '@skarbonka/offline_queue';
 const CACHE_BOXES_KEY = '@skarbonka/cache_boxes';
@@ -18,15 +19,22 @@ export async function getOfflineQueue(): Promise<OfflineQueueItem[]> {
   try {
     const raw = await AsyncStorage.getItem(OFFLINE_QUEUE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    try {
+      const decrypted = await decryptJson<OfflineQueueItem[]>(raw);
+      return Array.isArray(decrypted) ? decrypted : [];
+    } catch {
+      // Backward compatibility: fall back to legacy unencrypted JSON payload.
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    }
   } catch {
     return [];
   }
 }
 
 export async function setOfflineQueue(queue: OfflineQueueItem[]): Promise<void> {
-  await AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+  const cipher = await encryptJson(queue);
+  await AsyncStorage.setItem(OFFLINE_QUEUE_KEY, cipher);
 }
 
 export async function addToOfflineQueue(item: OfflineQueueItem): Promise<void> {
@@ -39,30 +47,44 @@ export async function getCachedBoxes(): Promise<UserBox[] | null> {
   try {
     const raw = await AsyncStorage.getItem(CACHE_BOXES_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : null;
+    try {
+      const decrypted = await decryptJson<UserBox[]>(raw);
+      return Array.isArray(decrypted) ? decrypted : null;
+    } catch {
+      // Backward compatibility: legacy unencrypted payload.
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    }
   } catch {
     return null;
   }
 }
 
 export async function setCachedBoxes(boxes: UserBox[]): Promise<void> {
-  await AsyncStorage.setItem(CACHE_BOXES_KEY, JSON.stringify(boxes));
+  const cipher = await encryptJson(boxes);
+  await AsyncStorage.setItem(CACHE_BOXES_KEY, cipher);
 }
 
 export async function getCachedTransactions(): Promise<Transaction[] | null> {
   try {
     const raw = await AsyncStorage.getItem(CACHE_TRANSACTIONS_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : null;
+    try {
+      const decrypted = await decryptJson<Transaction[]>(raw);
+      return Array.isArray(decrypted) ? decrypted : null;
+    } catch {
+      // Backward compatibility: legacy unencrypted payload.
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    }
   } catch {
     return null;
   }
 }
 
 export async function setCachedTransactions(transactions: Transaction[]): Promise<void> {
-  await AsyncStorage.setItem(CACHE_TRANSACTIONS_KEY, JSON.stringify(transactions));
+  const cipher = await encryptJson(transactions);
+  await AsyncStorage.setItem(CACHE_TRANSACTIONS_KEY, cipher);
 }
 
 export function isLikelyNetworkError(err: unknown): boolean {

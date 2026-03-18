@@ -459,10 +459,12 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
       const state = get();
       const box = state.userBoxes.find((b) => b.id === boxId);
       if (!box) throw new Error('Box not found');
+      // Reset current_amount by deleting all transactions.
+      // Database triggers keep `user_boxes.current_amount` in sync.
       const { error } = await supabase
-        .from('user_boxes')
-        .update({ current_amount: 0, updated_at: new Date().toISOString() } as never)
-        .eq('id', boxId);
+        .from('transactions')
+        .delete()
+        .eq('box_id', boxId);
       if (error) throw error;
       set((prev) => ({
         userBoxes: prev.userBoxes.map((b) =>
@@ -730,11 +732,6 @@ export const useBoxStore = create<BoxStore>((set, get) => ({
         .eq('id', transactionId);
       if (deleteError) throw deleteError;
       const newAmount = Math.max(0, Number(box.current_amount) - amount);
-      const { error: updateError } = await supabase
-        .from('user_boxes')
-        .update({ current_amount: newAmount, updated_at: new Date().toISOString() } as never)
-        .eq('id', boxId);
-      if (updateError) throw updateError;
       set((prev) => ({
         transactions: prev.transactions.filter((t) => t.id !== transactionId),
         userBoxes: prev.userBoxes.map((b) =>

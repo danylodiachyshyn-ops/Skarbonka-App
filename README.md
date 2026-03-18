@@ -25,6 +25,9 @@ A minimalist digital piggy bank mobile application built with React Native (Expo
      EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
      EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
      ```
+   - For App Store (EAS builds), do not rely on your local `.env`.
+     Set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` in your Expo/EAS project
+     environment variables (or secrets) so production builds get the correct values.
 
 3. **Set up Supabase database:**
    - Go to your Supabase project dashboard

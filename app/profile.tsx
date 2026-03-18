@@ -46,7 +46,7 @@ export default function ProfileScreen() {
       .select('full_name')
       .eq('id', user.id)
       .single();
-    setFullName(data?.full_name ?? null);
+    setFullName((data as any)?.full_name ?? null);
     setLoadingProfile(false);
   }, [user?.id]);
 
@@ -68,7 +68,7 @@ export default function ProfileScreen() {
     const trimmed = editNameValue.trim();
     if (!user?.id) return;
     setSavingName(true);
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('profiles')
       .update({ full_name: trimmed || null })
       .eq('id', user.id);
