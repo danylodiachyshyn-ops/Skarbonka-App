@@ -16,11 +16,17 @@
     ],
     "scheme": "skarbonka-app",
     "ios": {
-      "bundleIdentifier": "com.yourname.skarbonka",
-      "supportsTablet": true
+      "bundleIdentifier": "com.ddiachyshyn.skarbonka",
+      "supportsTablet": true,
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used to scan QR codes and upload images.",
+        "NSPhotoLibraryUsageDescription": "Used to select images for your profile and jars.",
+        "NSFaceIDUsageDescription": "Used to authenticate securely with Face ID."
+      }
     },
     "android": {
-      "package": "com.yourname.skarbonka",
+      "package": "com.ddiachyshyn.skarbonka",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1F96D3"
